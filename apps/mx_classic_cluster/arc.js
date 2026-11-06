@@ -38,6 +38,7 @@ const NUM_SIZE = 44, NUM_GROW = 0.5;      // base size, and how much bigger at t
 const NUM_BOX = 86;                       // each numeral's box (fits the largest size)
 const NUM_REACH = 0.85;                   // the growth starts this many thousand rpm away
 
+const NEEDLE_RED = [255, 38, 38];        // the needle and the lit rpm arc
 const ORANGE = [255, 122, 26], WHITE = '#f5f6f8', DIM = '#7a8088', FAINT = '#34383e', RED = '#ee3c32';
 
 /* where the layers sit on the 1920 x 720 panel */
@@ -146,10 +147,11 @@ function arcFx(opts) {
     const max = opts.max || 8000, red = opts.redline || 7000;
     return {
         id: 'arc-rpm', w: DW, h: DH, cx: DCX, cy: DCY, max, redline: red,
-        main: { shape: 'hollow', len: R - 4, tail: -NEEDLE_IN, inner: NEEDLE_IN, wid: 18, ow: 3, glowR: 6, glowA: 0.6, fillA: 0.7,
-            col: { edge: ORANGE, fill: [70, 30, 6], glow: [255, 110, 20], core: ORANGE, hi: [255, 190, 140] } },
+        // "red glass": a pale pink outline round a see-through red middle, a red glow
+        main: { shape: 'hollow', len: R - 4, tail: -NEEDLE_IN, inner: NEEDLE_IN, wid: 20, ow: 2.5, glowR: 7, glowA: 0.7, fillA: 0.55,
+            col: { edge: [255, 150, 140], fill: [200, 20, 20], glow: NEEDLE_RED, core: NEEDLE_RED, hi: [255, 170, 170] } },
         subs: [], hub: null, subHub: null,
-        ring: { r: R_PROG, w: W_PROG, a0: A0, a1: A1, aRed: A1 + 1, lit: ORANGE, red: ORANGE },
+        ring: { r: R_PROG, w: W_PROG, a0: A0, a1: A1, aRed: A1 + 1, lit: NEEDLE_RED, red: NEEDLE_RED },
         lights: { r: R_LIGHTS, w: W_LIGHTS, n: 10, a0: angleOf(red - 2000, max), a1: angleOf(red, max), gap: 0.8,
             green: 4, yellow: 7, cGreen: [40, 220, 90], cYellow: [255, 200, 30], cRed: [255, 40, 40], cDim: [60, 16, 16] },
     };

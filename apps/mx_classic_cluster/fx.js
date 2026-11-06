@@ -31,7 +31,9 @@ function kite(n) {
     const hw = n.wid / 2;
     // n.inner: a needle that starts that far out from the pivot (the arc style's, around the gear);
     // its tail is then -inner, so the cap below cuts it there
-    if (n.inner) return { T: [0, -n.len - 3], R1: [hw, -(n.inner + (n.len - n.inner) * 0.3)], R2: [hw * 0.77, -n.inner] };
+    // widest: where along it the needle is widest (0 = its base, 1 = the tip; 0.3 by default); base: its
+    // width at the base as a share of the widest (0.77)
+    if (n.inner) return { T: [0, -n.len - 3], R1: [hw, -(n.inner + (n.len - n.inner) * (n.widest == null ? 0.3 : n.widest))], R2: [hw * (n.base == null ? 0.77 : n.base), -n.inner] };
     return { T: [0, -n.len - 3], R1: [hw, -n.len * 0.2], R2: [hw * 0.77, n.tail] };
 }
 /** Outward unit normal and offset of the line through P0, P1 (right half, so outward is +x side). */

@@ -15,8 +15,8 @@ Four gauge styles (Settings → *Gauge style*):
   *Shift lights*, on).
 - **Sport**: rimless faces, bold white markings, solid red needles ([picture](docs/sport.png)).
 - **Classic**: chrome rings, orange markings, orange-red needles ([picture](docs/classic.png)).
-- **Arc** (new in 0.10.0): one tachometer in the middle with the gear and speed inside it, an orange arc that fills
-  with the revs, the hollow glow needle and the shift lights; numerals that grow as the needle comes up to them; big
+- **Arc** (new in 0.10.0): one tachometer in the middle with the gear and speed inside it, a red arc that fills
+  with the revs, a "red glass" needle (pale outline, see-through red middle, red glow) and the shift lights; numerals that grow as the needle comes up to them; big
   readouts left (oil, coolant, fuel bar, range) and right (boost, torque, odometer); and a strip along the bottom
   with the outside temperature, the drive mode and the intake air temperature ([picture](docs/arc.png)). The stock
   cluster is always hidden in this style.
