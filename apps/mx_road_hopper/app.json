@@ -1,0 +1,50 @@
+{
+  "id": "mx_road_hopper",
+  "title": "Road Hopper",
+  "description": "Hop across the road and the river to fill five homes, played with the iDrive controller. Parked only by default",
+  "version": "0.1.0",
+  "vendor": "custom",
+  "loggingId": "OAC8",
+  "iconGlyph": "RH",
+  "signals": {
+    "de.bmw.infotainment.vehicle.Vehicle2": {
+      "statusCarSpeed2": "rs"
+    },
+    "de.bmw.infotainment.controlelements.FrontCCU": {
+      "_optional": "the controller's own knob and press (the game is then played with the hidden buttons: turn to pick, press to hop)",
+      "statusRotaryEncoderState": "rs"
+    }
+  },
+  "screens": [
+    {
+      "name": "MAIN",
+      "kind": "menu",
+      "title": "Road Hopper",
+      "settings": true,
+      "items": [
+        ["button", "BTN_PLAY", "Play"],
+        ["button", "BTN_NEW", "New game"],
+        ["text", "MENU_INFO", ""]
+      ]
+    },
+    {
+      "name": "GAME",
+      "kind": "canvas",
+      "title": "Road Hopper",
+      "chrome": false,
+      "buttons": [
+        ["BTN_LEFT", "Left"],
+        ["BTN_HOP", "Hop"],
+        ["BTN_BACK", "Back"],
+        ["BTN_RIGHT", "Right"]
+      ]
+    }
+  ],
+  "settings": [
+    {"key": "parkedOnly", "label": "Parked only (pauses while driving)", "type": "bool", "default": true},
+    {"key": "difficulty", "label": "Traffic speed (new game)", "type": "choice", "default": "normal",
+     "options": [["easy", "Easy"], ["normal", "Normal"], ["hard", "Hard"]]},
+    {"key": "knob", "label": "Knob direction", "type": "choice", "default": "normal",
+     "options": [["normal", "Clockwise hops right"], ["reversed", "Clockwise hops left"]]}
+  ]
+}

@@ -38,6 +38,28 @@ It is an app for the [MGU Store](https://github.com/robertnisipeanu/mgu-store). 
 > cluster-render that checks every message against its protocol and composites what the cluster would show. Read
 > "Before you drive with it" below.
 
+## Road Hopper (game)
+
+A second app in this repository: hop across a busy road and a river to fill the five homes at the top
+([picture](docs/road-hopper.png)). An original game in the spirit of the arcade road-crossing games, with its own
+artwork. **Parked only** by default (it pauses while the car moves; setting *Parked only*).
+
+- **Controls:** turn the iDrive knob to hop left or right (one click, one hop), press to hop forward (when you let
+  go), press and hold to hop back. Pushing the controller up / down / left / right also hops, but only where the
+  HMI lets the game have the controller; otherwise the HMI acts on a push too (its menu, or back out of the app),
+  so use the knob and press. If the car doesn't send the controller's state to apps, turn to pick Left / Hop /
+  Back / Right on the hidden buttons and press to hop.
+- **Rules:** cars and trucks end a life; in the river stand on logs and rafts (rafts with a dark flicker are about
+  to sink); being carried off the side ends a life; a hop onto the bank between homes ends a life. 40 s per
+  crossing, 3 lives, an extra life at 10,000. Each level is faster (12 % a level). Best score kept.
+- **Menu:** Play / Continue, New game, settings (traffic speed, knob direction, parked only). BACK in the game
+  returns to the menu; the game waits there and its clock stops.
+- **Sound: none.** The app kit has no way for an app to play audio, and the head unit's audio is managed by its
+  own system, so the game only reports its sound moments (hop, splash, squash, home, level, game over) internally.
+- **Status: untested on a car.** Tested on a PC: its rules and controls with `node apps/mx_road_hopper/test.js`, a
+  bot that plays it (reaching homes on every speed), and the kit's desk preview with the GPU renderer stand-in.
+
+
 ## Install
 
 1. Have the MGU Store on the head unit (root SSH access is needed once for that; see its README).
