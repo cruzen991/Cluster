@@ -24,6 +24,10 @@ Two gauge styles (Settings → *Gauge style*):
   ([picture](docs/arc-twin.png)). The stock cluster is always
   hidden in this style. The background is drawn at half size (960x360, 1.4 MB of cluster-render's shared 16 MB) and
   stretched by the renderer.
+  **Driver camera:** cars with Driving Assistant Professional have a driver camera on top of the cluster, over the
+  middle. With the setting *Driver camera above the cluster* (on by default) the tach and the gear inside it are
+  drawn 80 % size and lower, so no tick or numeral sits under it; turn it off on a car without the camera for the
+  full-size tach.
 
 The Sport and Classic styles were removed in 0.11.0 (they are in this repository's history up to 0.10.3); a car
 set to either shows the Tech style.
