@@ -87,6 +87,22 @@
       ]
     },
     {
+      "key": "arcBg",
+      "label": "Background (Arc style)",
+      "type": "choice",
+      "default": "grid",
+      "options": [
+        [
+          "grid",
+          "Horizon grid"
+        ],
+        [
+          "graphite",
+          "Graphite"
+        ]
+      ]
+    },
+    {
       "key": "units",
       "label": "Speed",
       "type": "choice",

@@ -17,8 +17,10 @@ Two gauge styles (Settings → *Gauge style*):
   with the revs, a "red glass" needle (pale outline, see-through red middle, red glow) and the shift lights; numerals that grow as the needle comes up to them; big
   readouts left (oil, coolant, fuel bar, range) and right (boost, torque, odometer); and a strip along the bottom
   with the outside temperature, the drive mode and the intake air temperature, over a red perspective grid that
-  fades into a horizon below the middle ([picture](docs/arc.png)). The stock cluster is always hidden in this style.
-  The grid is drawn at half size (960x360, 1.4 MB of cluster-render's shared 16 MB) and stretched by the renderer.
+  fades into a horizon below the middle ([picture](docs/arc.png)), or (setting *Background*) graphite: dark grey falling
+  to black with a soft red pool of light under the dial ([picture](docs/arc-graphite.png)). The stock cluster is always
+  hidden in this style. The background is drawn at half size (960x360, 1.4 MB of cluster-render's shared 16 MB) and
+  stretched by the renderer.
 
 The Sport and Classic styles were removed in 0.11.0 (they are in this repository's history up to 0.10.3); a car
 set to either shows the Tech style.
@@ -111,7 +113,7 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which othe
 
 ## Settings
 
-Show on the cluster; gauge style (Tech, Arc); torque in lb-ft or Nm (Arc); shift lights (on); stock cluster hidden (default) or showing
+Show on the cluster; gauge style (Tech, Arc); background (Arc: horizon grid or graphite); torque in lb-ft or Nm (Arc); shift lights (on); stock cluster hidden (default) or showing
 between the dials; mph or km/h; °F or °C; redline (7000 for a
 B58); the needle sweep at start; tank size (59 l for a G20 M340i); moving the dials apart, together, up or down;
 needles drawn as redrawn images (default) or by a shader; boost signal gauge or absolute; retry after BMW pop-ups (off); demo data on the cluster

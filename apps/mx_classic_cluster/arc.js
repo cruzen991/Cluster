@@ -196,6 +196,27 @@ function gridBackground() {
     return cv;
 }
 
+/**
+ * "Graphite": dark grey falling to black towards the bottom and the sides, with a soft red pool of
+ * light under the dial. Smooth, so half size loses nothing.
+ */
+function graphiteBackground() {
+    const cv = new Canvas(BG_W, BG_H), d = cv.d, cx = BG_W / 2;
+    for (let y = 0; y < BG_H; y++) {
+        const py = y + 0.5, v = 10 + 16 * (1 - py / BG_H);
+        for (let x = 0; x < BG_W; x++) {
+            const px = x + 0.5, i = (y * BG_W + x) * 4;
+            const side = Math.max(0, 1 - Math.abs(px - cx) / 520);
+            const p = Math.max(0, 1 - Math.hypot((px - cx) / 420, (py - 330) / 70)), pool = p * p;
+            d[i] = v * side + 4 + 70 * pool; d[i + 1] = v * side + 4 + 12 * pool; d[i + 2] = v * side + 5 + 12 * pool; d[i + 3] = 255;
+        }
+    }
+    return cv;
+}
+
+/** The arc style's background by its setting: 'grid' (default) or 'graphite'. */
+function background(kind) { return kind === 'graphite' ? graphiteBackground() : gridBackground(); }
+
 /* ---------- the readout panels: cells redrawn one at a time, only their rectangles sent ---------- */
 
 class Panel {
@@ -309,7 +330,7 @@ function bigText(cv, str, x, y, size, col) {
 }
 
 module.exports = {
-    bigText, gridBackground, BG_W, BG_H,
+    bigText, gridBackground, graphiteBackground, background, BG_W, BG_H,
     DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
 };

@@ -163,7 +163,7 @@ class ClassicCluster {
      */
     build() {
         const s = this.getSettings();
-        const key = JSON.stringify([s.shift, s.style, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
+        const key = JSON.stringify([s.shift, s.style, s.arcBg, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
         if (!this.cr || key === this.faceKey) return;
         this.faceKey = key;
         const gen = this.buildGen = (this.buildGen || 0) + 1, cr = this.cr;
@@ -175,7 +175,8 @@ class ClassicCluster {
                 const art = this.arcArt(o);
                 later(() => {
                     if (!live()) return;
-                    if (!art.bg) art.bg = A.gridBackground();
+                    const bk = s.arcBg === 'graphite' ? 'graphite' : 'grid';
+                    if (!art.bg || art.bgKind !== bk) { art.bg = A.background(bk); art.bgKind = bk; }
                     later(() => { if (live()) this._arcLayers(s, o, art, t0); });
                 });
             });

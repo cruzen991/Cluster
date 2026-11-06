@@ -195,6 +195,14 @@ for (const st of ['tech']) {
     assert(opaque, 'the background is opaque: it hides the stock cluster');
     assert(top < 20, 'black at the top (' + top + ')');
     assert(bottom > 60, 'red lines near the bottom (' + bottom + ')');
+    const gr = A.background('graphite');
+    assert.strictEqual(gr.d.length, A.BG_W * A.BG_H * 4);
+    let gOpaque = true;
+    for (let i = 3; i < gr.d.length; i += 4) if (gr.d[i] !== 255) gOpaque = false;
+    const at = (x, y) => gr.d[(y * A.BG_W + x) * 4];
+    assert(gOpaque && at(480, 20) > at(5, 20) && at(480, 330) > at(480, 200) && at(480, 330) > 50, 'graphite: lighter middle, red pool under the dial');
+    const bg2 = require('./app.json').settings.find((x) => x.key === 'arcBg');
+    assert(bg2 && bg2.default === 'grid' && bg2.options.map((o) => o[0]).join() === 'grid,graphite');
 }
 
 /* a bad sample never freezes a needle */
