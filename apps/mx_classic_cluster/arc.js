@@ -43,11 +43,22 @@ const ORANGE_DIM = [200, 96, 22];          // the peak boost: present, never lou
 const ORANGE = [255, 122, 26], WHITE = '#f5f6f8', DIM = '#7a8088', FAINT = '#34383e', RED = '#ee3c32';
 
 /* where the layers sit on the 1920 x 720 panel */
-function arcLayout(dy) {
-    const y = dy || 0;
+/*
+ * notch: the car has a driver camera on top of the cluster, in the middle (cars with Driving
+ * Assistant Professional): it covers roughly x 740-1180, y 0-120 of the panel, the top of a
+ * full-size tach. Then the tach and the gear inside it are drawn NOTCH_SCALE smaller (the same
+ * pictures, stretched smaller by the renderer, bilinear) with the pivot NOTCH_CY down, which
+ * clears the camera with the ticks and keeps the bottom clear of the strip.
+ */
+const NOTCH_SCALE = 0.8, NOTCH_CY = 404;
+function arcLayout(dy, notch) {
+    const y = dy || 0, k = notch ? NOTCH_SCALE : 1, cy = y + (notch ? NOTCH_CY : DCY);
+    const sized = (w, h, px, py) => Object.assign({ x: Math.round(960 - px * k), y: Math.round(cy - py * k), w: Math.round(w * k), h: Math.round(h * k) },
+        k !== 1 ? { iw: w, ih: h, sampling: 'bilinear' } : {});
     return {
-        dial: { x: 960 - DCX, y: y + 0, w: DW, h: DH },
-        centre: { x: 960 - 150, y: y + DCY - 150, w: 300, h: 300 },
+        scale: k, cx: 960, cy,
+        dial: sized(DW, DH, DCX, DCY),
+        centre: sized(300, 300, 150, 150),
         left: { x: 50, y: y + 96, w: 540, h: 500 },
         right: { x: 1920 - 50 - 540, y: y + 96, w: 540, h: 500 },
         strip: { x: 560, y: y + 640, w: 800, h: 76 },
@@ -421,6 +432,6 @@ function bigText(cv, str, x, y, size, col) {
 
 module.exports = {
     bigText, needleSprite, gridBackground, graphiteBackground, background, BACKGROUNDS, BG_W, BG_H,
-    DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
+    NOTCH_SCALE, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
 };

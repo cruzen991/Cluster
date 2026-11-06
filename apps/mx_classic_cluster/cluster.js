@@ -176,7 +176,7 @@ class ClassicCluster {
      */
     build() {
         const s = this.getSettings();
-        const key = JSON.stringify([s.shift, s.style, s.arcBg, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
+        const key = JSON.stringify([s.shift, s.style, s.arcBg, s.notch, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
         if (!this.cr || key === this.faceKey) return;
         this.faceKey = key;
         const gen = this.buildGen = (this.buildGen || 0) + 1, cr = this.cr;
@@ -237,7 +237,7 @@ class ClassicCluster {
 
     /** The arc style's layers (see arc.js). */
     _arcLayers(s, o, art, t0) {
-        const cr = this.cr, L = A.arcLayout(s.dy);
+        const cr = this.cr, L = A.arcLayout(s.dy, s.notch);
         Object.keys(this.refs).forEach((k) => cr.drop(this.refs[k]));
         const R = this.refs = {};
         const base = { target: TARGET, visible: true, contend: s.retake ? 1 : 0 };
@@ -260,14 +260,15 @@ class ClassicCluster {
         R.dial = d.ref;
         if (this.mode === 'shader') {
             cr.pixels(d.ref, null, buf(face));
-            d.fx = cr.effect(Object.assign({}, base, { z: 2, fs: FX.shader(spec) }, L.dial));
+            d.fx = cr.effect(Object.assign({}, base, { z: 2, fs: FX.shader(spec), x: L.dial.x, y: L.dial.y, w: L.dial.w, h: L.dial.h }));
             cr.uniform(d.fx, 'u_v', [F.A0, F.SUB.a0, 0, F.SUB.a0]);
             R.dialFx = d.fx;
         } else {
             if (this.mode === 'rotate') {
                 const n = A.needleSprite(o);
-                d.needle = img({ z: 2, x: L.dial.x + A.DCX - n.px, y: L.dial.y + A.DCY - n.py, w: n.w, h: n.h, px: n.px, py: n.py,
-                    rotate: F.A0, sampling: 'bilinear' });
+                const k = L.scale;           // the needle at the dial's size, turning about the dial's pivot
+                d.needle = img({ z: 2, x: Math.round(L.cx - n.px * k), y: Math.round(L.cy - n.py * k), w: Math.round(n.w * k), h: Math.round(n.h * k),
+                    iw: n.w, ih: n.h, px: n.px * k, py: n.py * k, rotate: F.A0, sampling: 'bilinear' });
                 cr.pixels(d.needle, null, buf(n.cv));
                 d.needleAt = F.A0;
                 R.needle = d.needle;
@@ -286,7 +287,7 @@ class ClassicCluster {
         this.panels = {};
         for (const k of ['centre', 'left', 'right', 'strip']) {
             R[k] = img(Object.assign({ z: k === 'centre' ? 3 : 1 }, L[k]));
-            this.panels[k] = { ref: R[k], p: new A.Panel(L[k].w, L[k].h) };
+            this.panels[k] = { ref: R[k], p: new A.Panel(L[k].iw || L[k].w, L[k].ih || L[k].h) };
         }
         this.panelAt = 0; this.slow = null;
 

@@ -218,6 +218,25 @@ for (const st of ['tech']) {
     assert(!/u_v\.x\);/.test(FX.shader(noNeedle)) && FX.dirty(noNeedle, { a: 0, b: 0, c: 0, lv: 0 }, st).every((q) => q.w * q.h < 4000), 'no needle: only the lit arc moves');
 }
 
+/* the camera notch: a smaller tach, its ticks and numerals below the driver camera (x 740-1180, y 0-120) */
+{
+    const A = require('./arc');
+    const N = A.arcLayout(0, true), k = N.scale;
+    assert(k < 1 && N.dial.iw === A.DW && N.dial.sampling === 'bilinear' && N.centre.iw === 300);
+    // the pivot of the stretched dial lands at (cx, cy)
+    assert(Math.abs(N.dial.x + A.DCX * k - N.cx) <= 1 && Math.abs(N.dial.y + A.DCY * k - N.cy) <= 1);
+    const top = (r, a) => [N.cx + Math.sin(a * Math.PI / 180) * r * k, N.cy - Math.cos(a * Math.PI / 180) * r * k];
+    for (let a = -125; a <= 125; a += 5) {
+        const [x, y] = top(A.R, a);
+        if (x > 740 && x < 1180) assert(y > 125, 'tick at ' + a + ' deg under the camera (' + x.toFixed(0) + ',' + y.toFixed(0) + ')');
+        const [lx, ly] = top(340, a);                       // shift lights, red zone only (right side)
+        if (a > 20 && lx > 740 && lx < 1180) assert(ly > 125, 'shift light under the camera');
+    }
+    assert(N.cy + 222 * k < 640, 'the rpm label clears the strip');
+    const F0 = A.arcLayout(0, false);
+    assert.strictEqual(F0.scale, 1); assert(!F0.dial.iw, 'full size: no stretch');
+}
+
 /* the arc background: half size, opaque, dark above the horizon, lines below it */
 {
     const A = require('./arc');
