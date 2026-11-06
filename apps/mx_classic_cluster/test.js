@@ -43,7 +43,7 @@ for (const st of ['tech', 'sport', 'classic']) {
 /* the moving parts, drawn in JavaScript (the twin of the shader) */
 {
     const sp = F.dialFx('tech', 'rpm', { redline: 7000, max: 8000 });
-    const C = F.C, st = (a, lv, t) => ({ a, b: F.SUB.a0, lv: lv || 0, t: t || 0 });
+    const C = F.C, st = (a, lv) => ({ a, b: F.SUB.a0, c: F.SUB.a0, lv: lv || 0 });
     const at = (r, ang) => [C + Math.sin(ang * Math.PI / 180) * r, C - Math.cos(ang * Math.PI / 180) * r];
     // the hollow needle: a bright edge at the outline, a dark see-through middle, nothing far off it
     const [ex, ey] = at(150, 0);
@@ -61,18 +61,20 @@ for (const st of ['tech', 'sport', 'classic']) {
     const s0 = FX.shade(sp, ...at(L.r, segA(0)), st(0, 1));
     assert(s0[3] > 250 && s0[1] > 150 && s0[0] < 100, 'first light green');
     assert.strictEqual(FX.shade(sp, ...at(L.r, segA(8)), st(0, 1))[3], 0, 'ninth light off');
-    const on = FX.shade(sp, ...at(L.r, segA(8)), st(0, 11, 0.01)), off = FX.shade(sp, ...at(L.r, segA(8)), st(0, 11, 0.13));
+    const on = FX.shade(sp, ...at(L.r, segA(8)), st(0, 11)), off = FX.shade(sp, ...at(L.r, segA(8)), st(0, 12));
     assert(on[0] > 200 && off[0] < 100, 'redline flash');
 }
 
 /* dirty rectangles cover every pixel that changes (the redrawn mode depends on it) */
 for (const st of ['tech', 'classic']) {
     const sp = F.dialFx(st, 'rpm', { redline: 7000, max: 8000 });
-    const cases = [[{ a: -125, b: -52, lv: 0, t: 0 }, { a: -100, b: -40, lv: 0, t: 0 }],
-        [{ a: 10, b: 0, lv: 3, t: 0 }, { a: 17, b: 0, lv: 6, t: 0 }],
-        [{ a: 60, b: 0, lv: 11, t: 0.01 }, { a: 60.5, b: 0, lv: 11, t: 0.13 }]];
+    const cases = [[{ a: -125, b: -52, c: -52, lv: 0 }, { a: -100, b: -40, c: -30, lv: 0 }],
+        [{ a: 10, b: 0, c: 10, lv: 3 }, { a: 17, b: 0, c: 25, lv: 6 }],
+        [{ a: 60, b: 0, c: 40, lv: 11 }, { a: 60.5, b: 0, c: 41, lv: 12 }],
+        [{ a: 0, b: -52, c: -52, lv: 0 }, { a: 0, b: 52, c: 52, lv: 0 }]];
     for (const [o, n] of cases) {
-        const rects = FX.dirty(sp, o, n, true);
+        const rects = FX.dirty(sp, o, n);
+        assert(rects.length <= FX.MAX_RECTS);
         const inR = (x, y) => rects.some((q) => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h);
         for (let y = 0; y < sp.h; y += 2) for (let x = 0; x < sp.w; x += 2) {
             const p = FX.shade(sp, x + 0.5, y + 0.5, o), q = FX.shade(sp, x + 0.5, y + 0.5, n);
@@ -81,11 +83,44 @@ for (const st of ['tech', 'classic']) {
     }
 }
 
+/* the tach's small gauges: oil (u_v.y) and boost (u_v.w), side by side, apart from the gear window */
+{
+    const sp = F.dialFx('tech', 'rpm', { redline: 7000, max: 8000 });
+    assert.deepStrictEqual(sp.subs.map((s) => s.u), ['y', 'w']);
+    const [oil, boost] = sp.subs;
+    assert(boost.cx < F.C && oil.cx > F.C, 'boost on the left, oil on the right');
+    const lcdBottom = F.LCD.y + F.LCD.h;
+    sp.subs.forEach((s) => assert(s.cy - s.len - 4 > lcdBottom, 'small needle clear of the gear window'));
+    // boost at full scale points at the right end of its arc; oil does not move with it
+    const tip = (s, ang) => [s.cx + Math.sin(ang * Math.PI / 180) * (s.len - 3), s.cy - Math.cos(ang * Math.PI / 180) * (s.len - 3)];
+    const st = { a: -125, b: F.SUB.a0, c: F.SUB.a1, lv: 0 };
+    assert(FX.shade(sp, ...tip(boost, F.SUB.a1), st)[3] > 200, 'boost needle at 21 psi');
+    assert(FX.shade(sp, ...tip(oil, F.SUB.a1), st)[3] < 10, 'oil needle not moved by boost');
+    assert(/u_v\.w/.test(FX.shader(sp)) && !/u_time|highp float u_/.test(FX.shader(sp)), 'boost uses u_v.w; no clock, no forced highp');
+    assert(/#ifdef GL_FRAGMENT_PRECISION_HIGH/.test(FX.shader(sp)));
+    // the gear window's pixels are transparent where there is no text (the needle shows through)
+    const lc = F.lcd('2', '', { style: 'tech', center: true });
+    assert.strictEqual(lc.d[3], 0, 'corner transparent');
+    for (const stl of ['classic', 'sport']) assert.strictEqual(F.lcd('2', '', { style: stl, center: true }).d[3], 0, stl + ' window transparent');
+}
+
+/* a bad sample never freezes a needle */
+{
+    const C = require('./cluster');
+    assert.strictEqual(typeof C.ClassicCluster, 'function');
+}
+
 /* drive mode */
 {
     const { modeOf } = require('./modes');
     assert.deepStrictEqual(['SPORT_DYNAMIC', 2, 4, 'ECO_PRO_EFFICIENT', 0, 63, 'COMFORT_PLUS', undefined].map(modeOf),
         ['Sport', 'Sport Plus', 'Comfort', 'Eco Pro', null, null, 'Comfort Plus', null]);
+    const { boostPsiOf } = require('./modes');
+    assert.strictEqual(boostPsiOf(null, 0, 0, 'gauge'), null, 'no value');
+    assert(Math.abs(boostPsiOf(1, 1000, 1500, 'gauge') - 14.5038) < 1e-6, '1 bar = 14.5 psi');
+    assert.strictEqual(boostPsiOf(1, 1000, 3000, 'gauge'), null, 'stale after 1.5 s');
+    assert(Math.abs(boostPsiOf(2.2, 0, 0, 'absolute') - (2.2 * 14.5038 - 14.696)) < 1e-6, 'absolute: minus one atmosphere');
+    assert.strictEqual(boostPsiOf(0.9, 0, 0, 'absolute'), 0, 'vacuum reads 0');
 }
 
 /* the app's screen stays on the software path; defaults */
@@ -94,6 +129,7 @@ for (const st of ['tech', 'classic']) {
     const r = spec.settings.find((x) => x.key === 'renderer');
     assert(r && r.default === 'software' && r.hidden && r.reset);
     assert.strictEqual(spec.settings.find((x) => x.key === 'style').default, 'tech');
+    assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "redraw");
     assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
 }
 

@@ -1,7 +1,7 @@
 # Classic Cluster
 
 Round dials on the instrument cluster of an iDrive 7 car (MGU head unit, Live Cockpit Professional cluster): a
-speedometer with a fuel gauge, a tachometer with an oil-temperature gauge and a gear window, and a centre panel with
+speedometer with a fuel gauge, a tachometer with boost (0-21 psi) and oil-temperature gauges and a gear window, and a centre panel with
 the drive mode, the speed, the range and the odometer. By default the stock gauges are hidden behind a black
 background while the dials are on; BMW's warning and indicator lights are drawn by the cluster above it.
 
@@ -85,6 +85,7 @@ The app's own loop catches its errors, but a freeze is not something it can see 
 | Tachometer, scale to redline + 500 rpm, red from the redline | `CDS.statusEngineSpeed2` |
 | Shift lights (Tech style) | `CDS.statusEngineSpeed2` |
 | Oil temperature, 120-300 °F or 50-150 °C | `CDS.statusEngineTemperature` |
+| Boost, 0-21 psi (small gauge, left of the tach's bottom) | `FES.statusSwitchDriveDynamicSport2` (`displayBoostPressure`), raw x 0.01 bar as the idrive7-apps Live Data app reads it (its scaling marked "scale?" there); setting *Boost signal*: gauge (default) or absolute (subtracts 14.7 psi). If it reads about 14 psi at idle, the signal is absolute: switch the setting |
 | Fuel, 0-1/1 | `KombiIF.statusRangeTankStatus` (litres) over the tank size setting |
 | Gear LCD: P, R, N, D1-D8 | `VehicleInformation.statusGearboxDrive` / `DataPowerTrain2` |
 | Drive mode (centre panel, text) | `FES.statusFESVehicleDynamicSwitchHMI` (`actualValueModeDrivingExperience`), decoded with the idrive7-apps Live Data app's table; *DRIVE MODE ---* until the car sends one |
@@ -97,7 +98,7 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which othe
 Show on the cluster; gauge style (Tech, Sport, Classic); shift lights (on); stock cluster hidden (default) or showing
 between the dials; mph or km/h; °F or °C; classic orange or white dial lighting (Classic style); redline (7000 for a
 B58); the needle sweep at start; tank size (59 l for a G20 M340i); moving the dials apart, together, up or down;
-needles drawn by a shader (default) or redrawn images; retry after BMW pop-ups (off); demo data on the cluster
+needles drawn as redrawn images (default) or by a shader; boost signal gauge or absolute; retry after BMW pop-ups (off); demo data on the cluster
 (never, by default).
 
 The *Needle sweep* button sweeps whatever the *Needle sweep at start* setting says (that setting only controls the
@@ -168,12 +169,18 @@ refused: that is why the dials showed on the car and the needles did not. From 0
 
 The moving parts, two ways (setting *Needles drawn by*):
 
-- **Shader (default):** each dial's moving parts are one effect layer drawn by a fragment shader; the state is one
-  uniform (4 numbers) and the flash runs on the renderer's own clock, so a frame costs a few bytes. Smooth.
-- **Redrawn images:** no shaders at all. The app draws the same picture (`fx.js` has a JavaScript twin of the
-  shader) into the face image itself and sends only the rectangles that changed, at most 6 times a second per dial:
-  choppier, 1-4 MB/s of the link while the needles move, and real CPU work on the head unit. Use it only if the
-  shader shows nothing.
+- **Redrawn images (default):** no shaders at all. The app draws the moving parts (`fx.js`) into the face image itself
+  and sends only the rectangles that changed (at most 12 per update, as cluster-render rewrites the whole image past
+  16), at most 6 times a second per dial: 1-4.5 MB/s of the link while the needles move, and real CPU work on the
+  head unit. This is the mode seen working on a car.
+- **Shader:** each dial's moving parts are one effect layer drawn by a fragment shader; the state is one uniform (4
+  numbers), so a frame costs a few bytes. Smoother. In 0.7.0 it showed no needles on the car: that shader demanded
+  `highp` precision, which many embedded GPUs do not have in fragment shaders, so it would not compile there. From
+  0.8.0 it uses `highp` only where the GPU has it (as cluster-render's own examples do), and the redline flash is
+  driven by the app, not a shader clock. Not yet seen on a car: if it shows no needles, the app screen's *moving*
+  line says what cluster-render reported.
+
+The gear and speed windows are transparent apart from their figures (0.7.0's opaque box hid the needle at low rpm).
 
 The app's screen in the head unit shows *Layers: n of 8* and, per group (background, centre, dials, moving, lcds),
 what cluster-render reports for them (shown, waiting, stalled, hidden, error) and why. A photo of that screen says

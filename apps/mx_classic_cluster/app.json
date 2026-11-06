@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Classic BMW round dials with orange needles on the instrument cluster",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -19,7 +19,8 @@
       "DataPowerTrain2": "s"
     },
     "de.bmw.infotainment.drivingexcitement.FES": {
-      "statusFESVehicleDynamicSwitchHMI": "rs"
+      "statusFESVehicleDynamicSwitchHMI": "rs",
+      "statusSwitchDriveDynamicSport2": "rs"
     },
     "de.bmw.infotainment.KombiIF": {
       "statusRangeTankStatus": "rs"
@@ -53,14 +54,16 @@
     {"key": "shift", "label": "Shift lights (Tech style)", "type": "bool", "default": true},
     {"key": "backdrop", "label": "Stock cluster", "type": "choice", "default": "full", "reset": 1,
      "options": [["full", "Hidden (black background, centre info)"], ["none", "Shows between the dials"]]},
+    {"key": "boostRef", "label": "Boost signal", "type": "choice", "default": "gauge",
+     "options": [["gauge", "Gauge (0 at idle)"], ["absolute", "Absolute (subtract 14.7 psi)"]]},
     {"key": "tank", "label": "Fuel tank size", "type": "number", "unit": "l", "default": 59,
      "steps": [40, 45, 50, 52, 55, 57, 59, 60, 63, 65, 68, 70, 74, 80]},
     {"key": "dx", "label": "Dials apart", "type": "number", "unit": "px", "default": 0,
      "steps": [-80, -60, -40, -20, 0, 20, 40, 60, 80]},
     {"key": "dy", "label": "Dials up / down", "type": "number", "unit": "px", "default": 0,
      "steps": [-30, -20, -10, 0, 10, 20, 30]},
-    {"key": "needles", "label": "Needles drawn by", "type": "choice", "default": "shader", "reset": 3,
-     "options": [["shader", "Shader (default, smooth)"], ["redraw", "Redrawn images (choppier, no shaders)"]]},
+    {"key": "needles", "label": "Needles drawn by", "type": "choice", "default": "redraw", "reset": 4,
+     "options": [["redraw", "Redrawn images (default, works on the car)"], ["shader", "Shader (smoother, not yet seen on a car)"]]},
     {"key": "retake", "label": "Retry after BMW pop-ups (off: wait until the cluster is free)", "type": "bool", "default": false},
     {"key": "demo", "label": "Demo data on the cluster", "type": "choice", "default": "off",
      "options": [["off", "Never"], ["on", "Always (parked testing only)"]]},

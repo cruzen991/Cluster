@@ -1,5 +1,5 @@
 'use strict';
-/** modes.js - the drive mode as text. */
+/** modes.js - signal values into what the dials show: the drive mode as text, boost in psi. */
 /* the driving experience switch's mode (FES statusFESVehicleDynamicSwitchHMI), as names or wire numbers,
  * the same table the idrive7-apps Live Data app reads it with; null: no mode to show */
 const MODES = { SPORT_DYNAMIC: 'Sport', SPORT_EXPERT: 'Sport Plus', ECO_PRO_EFFICIENT: 'Eco Pro', 1: 'Sport', 2: 'Sport Plus',
@@ -12,4 +12,13 @@ function modeOf(x) {
     return m ? String(x).toLowerCase().split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ') : null;
 }
 
-module.exports = { modeOf, MODES };
+/**
+ * Boost in psi from the last value, or null when there is none or it is older than staleMs.
+ * ref 'absolute': the signal is absolute pressure, so one atmosphere (14.7 psi) comes off.
+ */
+function boostPsiOf(bar, at, now, ref, staleMs) {
+    staleMs = staleMs || 1500;
+    if (bar === null || now - at > staleMs) return null;
+    return Math.max(0, bar * 14.5038 - (ref === 'absolute' ? 14.696 : 0));
+}
+module.exports = { modeOf, MODES, boostPsiOf };

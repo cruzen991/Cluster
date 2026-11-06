@@ -6,15 +6,17 @@
  * cluster-render lets one app have 8 layers at most (CompositorLimits.per_client), so a dial is
  * two layers: its face (a still image, faces.js) and this. The same description is turned into
  *   shader(spec)            a GLSL ES 1.00 fragment shader for an effect layer the size of the
- *                           face; the state comes in one vec4 uniform, u_v, and the flash from
- *                           the renderer's clock (u_time), so a flash costs no messages;
+ *                           face; the whole state comes in one vec4 uniform, u_v;
  *   shade(spec, x, y, st)   the same picture in JavaScript, pixel by pixel, which the
  *                           "redrawn images" mode composites into the face image itself.
  * Keep the two in step: every term of one has its twin in the other.
  *
  * Coordinates: pixels of the face image, y down. Angles: degrees clockwise from 12 o'clock.
- * State: { a: main needle angle, b: small needle angle, lv: shift lights lit (0..n, n+1 = flash),
- *          t: seconds, for the flash }.
+ * State (u_v): { a (x): main needle angle, b (y) and c (w): the small needles' angles,
+ *          lv (z): shift lights lit, 0..n; n+1 all lit (flash on), n+2 all dim (flash off) }.
+ * The app turns the flash on and off by sending lv: nothing here depends on a clock, so the
+ * shader needs no highp (many embedded GPUs have none in fragment shaders, and a shader that
+ * demands it does not compile there: that is why 0.7.0's shader needles did not show).
  */
 
 const RAD = Math.PI / 180;
@@ -37,13 +39,17 @@ function edge(P0, P1) {
 }
 
 function shader(spec) {
-    const m = spec.main, s = spec.sub, H = spec.hub, SH = spec.subHub, R = spec.ring, L = spec.lights;
+    const m = spec.main, H = spec.hub, SH = spec.subHub, R = spec.ring, L = spec.lights;
     const out = [];
     out.push('#version 100');
     out.push('// cc-fx ' + JSON.stringify(spec));
+    // highp where the GPU has it, else mediump (as cluster-render's own examples do)
+    out.push('#ifdef GL_FRAGMENT_PRECISION_HIGH');
     out.push('precision highp float;');
+    out.push('#else');
+    out.push('precision mediump float;');
+    out.push('#endif');
     out.push('uniform vec4 u_v;');
-    out.push('uniform highp float u_time;');
     out.push('varying vec2 v_uv;');
     out.push('vec4 acc;');
     out.push('void over(vec3 c, float a) { a = clamp(a, 0.0, 1.0); acc = vec4(c * a + acc.rgb * (1.0 - a), a + acc.a * (1.0 - a)); }');
@@ -79,17 +85,17 @@ function shader(spec) {
         out.push('    float e = min(u - i, i + 1.0 - u) * ' + f(step * RAD * L.r) + ' - ' + f(L.gap * RAD * L.r) + ';');
         out.push('    float a = clamp(' + f(L.w / 2 + 0.5) + ' - abs(rr - ' + f(L.r) + '), 0.0, 1.0) * clamp(e + 0.5, 0.0, 1.0);');
         out.push('    vec3 c = i < ' + f(L.green) + ' ? ' + v3(L.cGreen) + ' : (i < ' + f(L.yellow) + ' ? ' + v3(L.cYellow) + ' : ' + v3(L.cRed) + ');');
-        out.push('    if (u_v.z > ' + f(L.n + 0.5) + ') { c = fract(u_time * ' + f(FLASH_HZ) + ') < 0.5 ? ' + v3(L.cRed) + ' : ' + v3(L.cDim) + '; }');
+        out.push('    if (u_v.z > ' + f(L.n + 0.5) + ') { c = u_v.z < ' + f(L.n + 1.5) + ' ? ' + v3(L.cRed) + ' : ' + v3(L.cDim) + '; }');
         out.push('    else if (i + 0.5 > u_v.z) { a = 0.0; }');
         out.push('    over(c, a);');
         out.push('  }');
     }
-    if (s) {
-        out.push('  { vec2 q = rot(p - vec2(' + f(s.cx) + ', ' + f(s.cy) + '), u_v.y);');
+    (spec.subs || []).forEach((s) => {
+        out.push('  { vec2 q = rot(p - vec2(' + f(s.cx) + ', ' + f(s.cy) + '), u_v.' + s.u + ');');
         out.push('    float d = taper(q, ' + f(s.len) + ', ' + f(s.tail) + ', ' + f(s.wid) + ');');
         out.push('    if (d < 8.0) { over(' + v3(m.col.glow) + ', (1.0 - smoothstep(0.0, 6.0, d)) * 0.16); over(' + v3(m.col.edge) + ', 0.5 - d); over(' + v3(m.col.core) + ', -0.7 - d); } }');
-        if (SH) out.push('  hub(p - vec2(' + f(s.cx) + ', ' + f(s.cy) + '), ' + hubArgs(SH) + ');');
-    }
+        if (SH) out.push('  hub(p - vec2(' + f(s.cx) + ', ' + f(s.cy) + '), ' + hubArgs(Object.assign({}, SH, { r: s.hr || SH.r })) + ');');
+    });
     out.push('  { vec2 q = rot(pc, u_v.x);');
     if (m.shape === 'hollow') {
         const k = kite(m), e1 = edge(k.T, k.R1), e2 = edge(k.R1, k.R2);
@@ -143,7 +149,7 @@ function shade(spec, x, y, st) {
         if (h.r1 > 0) over(h.c1, h.r1 + 0.5 - d);
         if (h.r2 > 0) over(h.c2, h.r2 + 0.5 - d);
     };
-    const m = spec.main, s = spec.sub, R = spec.ring, L = spec.lights;
+    const m = spec.main, R = spec.ring, L = spec.lights;
     const pcx = x - spec.cx, pcy = y - spec.cy, rr = Math.hypot(pcx, pcy);
     const th = Math.atan2(pcx, -pcy) / RAD;
     if (R && Math.abs(rr - R.r) < R.w / 2 + 1) {
@@ -156,15 +162,16 @@ function shade(spec, x, y, st) {
         const e = Math.min(u - i, i + 1 - u) * step * RAD * L.r - L.gap * RAD * L.r;
         let a = cl(L.w / 2 + 0.5 - Math.abs(rr - L.r)) * cl(e + 0.5);
         let c = i < L.green ? L.cGreen : i < L.yellow ? L.cYellow : L.cRed;
-        if (st.lv > L.n + 0.5) c = ((st.t * FLASH_HZ) % 1) < 0.5 ? L.cRed : L.cDim;
+        if (st.lv > L.n + 0.5) c = st.lv < L.n + 1.5 ? L.cRed : L.cDim;
         else if (i + 0.5 > st.lv) a = 0;
         over(c, a);
     }
-    if (s) {
-        const [qx, qy] = rot(x - s.cx, y - s.cy, st.b);
+    for (const s of spec.subs || []) {
+        const ang = s.u === 'w' ? st.c : st.b;
+        const [qx, qy] = rot(x - s.cx, y - s.cy, ang);
         const d = taper(qx, qy, s.len, s.tail, s.wid);
         if (d < 8) { over(m.col.glow, (1 - sm(0, 6, d)) * 0.16); over(m.col.edge, 0.5 - d); over(m.col.core, -0.7 - d); }
-        if (spec.subHub) hub(x - s.cx, y - s.cy, spec.subHub);
+        if (spec.subHub) hub(x - s.cx, y - s.cy, Object.assign({}, spec.subHub, { r: s.hr || spec.subHub.r }));
     }
     {
         const [qx, qy] = rot(pcx, pcy, st.a);
@@ -198,10 +205,7 @@ function needleRects(spec, a, n) {
     const m = spec.main, mg = (m.shape === 'hollow' ? m.wid / 2 + 19 : m.wid * 0.7 + 9);
     return pieces(spec.cx, spec.cy, a, m.len + 4, m.tail + 4, mg, n);
 }
-function subRects(spec, b) {
-    const s = spec.sub;
-    return s ? pieces(s.cx, s.cy, b, s.len + 2, s.tail + 2, s.wid * 0.7 + 7, 2) : [];
-}
+function subRects(s, b) { return pieces(s.cx, s.cy, b, s.len + 2, s.tail + 2, s.wid * 0.7 + 7, 2); }
 function pieces(cx, cy, a, len, tail, mg, n) {
     const s = Math.sin(a * RAD), c = Math.cos(a * RAD), out = [];
     for (let i = 0; i < n; i++) {
@@ -227,16 +231,19 @@ function sectorRects(cx, cy, r, w, a0, a1) {
     return out;
 }
 /** The rectangles a change from state o to state n touches. */
-function dirty(spec, o, n, flashChanged) {
+function dirty(spec, o, n) {
     let r = [];
     if (!o) return [{ x: 0, y: 0, w: spec.w, h: spec.h }];
     if (o.a !== n.a) {
         r = r.concat(pairUp(needleRects(spec, o.a, 8), needleRects(spec, n.a, 8)));
         if (spec.ring) r = r.concat(sectorRects(spec.cx, spec.cy, spec.ring.r, spec.ring.w, Math.max(spec.ring.a0, Math.min(o.a, spec.ring.a1)), Math.max(spec.ring.a0, Math.min(n.a, spec.ring.a1))));
     }
-    if (o.b !== n.b) r = r.concat(pairUp(subRects(spec, o.b), subRects(spec, n.b)));
+    for (const s of spec.subs || []) {
+        const k = s.u === 'w' ? 'c' : 'b';
+        if (o[k] !== n[k]) r = r.concat(pairUp(subRects(s, o[k]), subRects(s, n[k])));
+    }
     const L = spec.lights;
-    if (L && (o.lv !== n.lv || (n.lv > L.n && flashChanged))) {
+    if (L && o.lv !== n.lv) {
         const step = (L.a1 - L.a0) / L.n;
         for (let i = 0; i < L.n; i++) {
             const was = o.lv > L.n || i < o.lv, now = n.lv > L.n || i < n.lv;

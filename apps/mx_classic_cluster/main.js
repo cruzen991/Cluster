@@ -24,7 +24,7 @@ const W = 1600, H = 520;
 const STALE_MS = 1500;
 const KOMBI = 'de.bmw.infotainment.KombiIF';
 const FES = 'de.bmw.infotainment.drivingexcitement.FES';
-const { modeOf } = require('./modes');
+const { modeOf, boostPsiOf } = require('./modes');
 
 mgu.run({
     async start(ctx) {
@@ -38,18 +38,22 @@ mgu.run({
             sweep: settings.get('sweep') !== false,
             backdrop: settings.get('backdrop') === 'none' ? 'none' : 'full',
             tank: Number(settings.get('tank')) || 59,
+            boostRef: settings.get('boostRef') === 'absolute' ? 'absolute' : 'gauge',
             dx: Number(settings.get('dx')) || 0,
             dy: Number(settings.get('dy')) || 0,
             demo: settings.get('demo') === 'on',
             retake: settings.get('retake') === true,
             style: ['classic', 'sport'].indexOf(settings.get('style')) >= 0 ? settings.get('style') : 'tech',
             shift: settings.get('shift') !== false,
-            needles: settings.get('needles') === 'redraw' ? 'redraw' : 'shader',
+            needles: settings.get('needles') === 'shader' ? 'shader' : 'redraw',
         });
 
         // fuel: litres in the tank from the cluster's own range / tank status
         // and the range and odometer for the centre panel, from the same field
         let fuelL = null, rangeKm = null, odoKm = null, modeText = '';
+        // boost: the sport display's boost pressure (FES statusSwitchDriveDynamicSport2), raw x 0.01 bar,
+        // 255 = no value; the scaling is the idrive7-apps Live Data app's (marked "scale?" there)
+        let boostBar = null, boostAt = 0;
         const car = new Car(ctx, ['rpm', 'speed', 'temps', 'gear'], {
             [KOMBI]: { statusRangeTankStatus: (v) => {
                 if (!v) return;
@@ -58,11 +62,17 @@ mgu.run({
                 if (typeof r === 'number' && r >= 0 && r < 4095) rangeKm = r;
                 if (typeof o === 'number' && o >= 0 && o < 16777215) odoKm = o;
             } },
-            [FES]: { statusFESVehicleDynamicSwitchHMI: (v) => {
-                const raw = v && v.actualValueModeDrivingExperience, m = modeOf(raw);
-                if (m !== modeText && m !== null) log.info('drive mode ' + JSON.stringify(raw) + ' -> ' + m);
-                if (m !== null) modeText = m;
-            } },
+            [FES]: {
+                statusFESVehicleDynamicSwitchHMI: (v) => {
+                    const raw = v && v.actualValueModeDrivingExperience, m = modeOf(raw);
+                    if (m !== modeText && m !== null) log.info('drive mode ' + JSON.stringify(raw) + ' -> ' + m);
+                    if (m !== null) modeText = m;
+                },
+                statusSwitchDriveDynamicSport2: (v) => {
+                    const b = v && v.displayBoostPressure;
+                    if (typeof b === 'number' && b >= 0 && b < 255) { boostBar = b * 0.01; boostAt = Date.now(); }
+                },
+            },
         });
         car.setRedline(S().redline);
         let lastTick = 0;
@@ -109,13 +119,14 @@ mgu.run({
             const dist = (km) => (km === null ? '---' : String(Math.round(s.units === 'kmh' ? km : km / 1.609344)));
             const du = s.units === 'kmh' ? 'km' : 'mi';
             const info = { modeText: d.demo && s.demo ? 'Sport' : modeText, rangeText: (d.demo && s.demo ? '312' : dist(rangeKm)) + ' ' + du, odoText: (d.demo && s.demo ? '23817' : dist(odoKm)) + ' ' + du };
-            if (!usable) return Object.assign({ speed: 0, rpm: 0, fuel: null, oil: null, oilC: null, speedText: '---', gearText: '-', live: false }, info);
+            if (!usable) return Object.assign({ speed: 0, rpm: 0, fuel: null, oil: null, oilC: null, boost: null, boostPsi: null, speedText: '---', gearText: '-', live: false }, info);
             const kmh = d.speed || 0, speed = s.units === 'kmh' ? kmh : kmh / 1.609344;
             const oilC = typeof d.oil === 'number' ? d.oil : null;
             const oilDial = oilC === null ? null : s.tempUnit === 'f' ? ((oilC * 9 / 5 + 32) - 120) / 180 : (oilC - 50) / 100;
             const fuel = d.demo ? 0.62 : fuelL === null ? null : fuelL / s.tank;
+            const boostPsi = d.demo ? Math.max(0, Math.min(19, ((d.rpm || 0) - 1500) / 3500 * 19)) : boostPsiOf(boostBar, boostAt, now, s.boostRef);
             return {
-                speed, rpm: d.rpm || 0, fuel, oil: oilDial, oilC,
+                speed, rpm: d.rpm || 0, fuel, oil: oilDial, oilC, boostPsi, boost: boostPsi === null ? null : boostPsi / F.BOOST_MAX,
                 speedText: String(Math.round(speed)), gearText: gearText(d), live: !d.demo,
                 rangeText: info.rangeText, odoText: info.odoText, modeText: info.modeText,
             };
@@ -154,7 +165,8 @@ mgu.run({
             cv.text(v.live ? 'Live car data' : (s.demo ? 'Demo data' : 'No car data: needles parked'), mid, 302, 24, t.dim, { align: 'center', literal: true });
             cv.text(v.speedText + ' ' + (s.units === 'kmh' ? 'km/h' : 'mph') + '   ' + Math.round(v.rpm) + ' rpm   ' + v.gearText,
                 mid, 350, 32, t.text, { align: 'center', literal: true });
-            const extra = [v.oilC !== null ? 'Oil ' + fmtTemp(v.oilC, s.tempUnit) : '', st.budget ? 'Link ' + st.budget : ''].filter(Boolean).join('   ');
+            const extra = [v.oilC !== null ? 'Oil ' + fmtTemp(v.oilC, s.tempUnit) : '', v.boostPsi != null ? 'Boost ' + v.boostPsi.toFixed(1) + ' psi' : '',
+                st.budget ? 'Link ' + st.budget : ''].filter(Boolean).join('   ');
             if (extra) cv.text(extra, mid, 388, 22, t.dim, { align: 'center', literal: true });
             // diagnostics: what cluster-render says about each group of layers (a photo of this helps)
             if (s.on) {

@@ -21,7 +21,10 @@ const C = D / 2;                // its centre
 const R_BEZEL = 328, R_CHROME = 312, R_FACE = 310;
 const R_TICK = 292;             // outer end of the main ticks
 const A0 = -125, A1 = 125;      // main sweep
-const SUB = { cy: C + 228, r: 78, a0: -52, a1: 52 };   // sub-dial (fuel / oil), its pivot below the centre
+const SUB = { cx: C, cy: C + 228, r: 78, a0: -52, a1: 52 };   // the speedometer's fuel gauge, its pivot below the centre
+/* the tachometer's two small gauges, side by side below the gear window, in the gap the main needle never sweeps */
+const TSUB = { boost: { cx: C - 100, cy: C + 214, r: 60 }, oil: { cx: C + 100, cy: C + 214, r: 60 } };
+const BOOST_MAX = 21;           // psi, full scale of the boost gauge
 const LCD = { w: 200, h: 54, y: C + 52 };              // LCD window, centred horizontally, top at y
 
 /* the illumination: classic night orange, or the white of a daytime face */
@@ -91,21 +94,34 @@ function blank(cv) {
     cv.arc(C, C, R_FACE - 2, R_FACE + 2, 0, 360, '#000000');
 }
 
-/** A sub-dial: ticks, end labels, a red zone from redFrom (fraction) and a small icon below. */
-function subDial(cv, il, labels, redFrom, redTo, icon, font) {
-    const cx = C, cy = SUB.cy;
-    for (let i = 0; i <= 8; i++) {
-        const t = i / 8, a = subAngleOf(t);
-        const red = t >= redFrom - 1e-6 && t <= redTo + 1e-6;
-        const major = i % 4 === 0;
-        tick(cv, cx, cy, a, SUB.r - (major ? 16 : 9), SUB.r, major ? 4 : 2.5, red ? il.red : il.mark);
+/**
+ * A small gauge. g: { cx, cy, r }; o: { labels: [[fraction, text]], red: [from, to] fractions or null,
+ * icon(cv, x, y, il), font, div (ticks, default 8), every (a major tick every, default 4) }
+ */
+function subDial(cv, il, g, o) {
+    const div = o.div || 8, every = o.every || 4, k = g.r / 78;
+    for (let i = 0; i <= div; i++) {
+        const t = i / div, a = subAngleOf(t);
+        const red = o.red && t >= o.red[0] - 1e-6 && t <= o.red[1] + 1e-6;
+        const major = i % every === 0;
+        tick(cv, g.cx, g.cy, a, g.r - (major ? 16 : 9) * k, g.r, (major ? 4 : 2.5) * Math.max(0.8, k), red ? il.red : il.mark);
     }
-    labels.forEach(([t, s]) => {
-        const [x, y] = pol(cx, cy, SUB.r + 20, subAngleOf(t));
-        cv.text(s, x, y + 8, font ? 18 : 22, il.num, { font: font || 'bold', align: 'center', literal: true });
+    const size = o.font ? Math.round(18 * Math.max(0.85, k)) : Math.round(22 * Math.max(0.8, k));
+    o.labels.forEach(([t, txt]) => {
+        const [x, y] = pol(g.cx, g.cy, g.r + 18 * Math.max(0.85, k), subAngleOf(t));
+        cv.text(txt, x, y + size * 0.36, size, il.num, { font: o.font || 'bold', align: 'center', literal: true });
     });
-    if (icon) icon(cv, cx, cy + 22, il);
+    if (o.icon) o.icon(cv, g.cx, g.cy + (g.r >= 70 ? 22 : 26), il, o.font);
 }
+
+/** The tachometer's oil-temperature and boost gauges. */
+function tachSubs(cv, il, opts, font) {
+    const f = opts.tempUnit === 'f';
+    subDial(cv, il, TSUB.oil, { labels: f ? [[0, '120'], [0.5, '210'], [1, '300']] : [[0, '50'], [0.5, '100'], [1, '150']],
+        red: [f ? (280 - 120) / 180 : 0.9, 1], icon: oilIcon, font });
+    subDial(cv, il, TSUB.boost, { labels: [[0, '0'], [1 / 3, '7'], [2 / 3, '14'], [1, '21']], div: 6, every: 2, icon: psiLabel, font });
+}
+function psiLabel(cv, x, y, il, font) { cv.text('PSI', x, y + 4, font ? 16 : 18, il.dim, { font: font || 'bold', align: 'center', literal: true }); }
 
 /** The fuel pump glyph. */
 function pumpIcon(cv, x, y, il) {
@@ -161,7 +177,7 @@ function speedoFace(opts) {
     cv.text(mph ? 'MPH' : 'km/h', C, C - 108, 32, il.num, { font: 'bold', align: 'center', literal: true });
     cv.text(mph ? 'km/h' : 'mph', C, C - 76, 18, il.dim, { font: 'label', align: 'center', literal: true });
     if (opts.well !== false) lcdWell(cv);
-    subDial(cv, il, [[0, '0'], [0.5, '1/2'], [1, '1/1']], 0, 0.125, pumpIcon);
+    subDial(cv, il, SUB, { labels: [[0, '0'], [0.5, '1/2'], [1, '1/1']], red: [0, 0.125], icon: pumpIcon });
     return cv;
 }
 
@@ -190,10 +206,8 @@ function tachFace(opts) {
     }
     cv.text('x1000 RPM', C, C - 100, 24, il.num, { font: 'bold', align: 'center', literal: true });
     lcdWell(cv);
-    const f = opts.tempUnit === 'f';
-    // oil temperature: 50-150 C or 120-300 F, red from 140 C / 280 F
-    subDial(cv, il, f ? [[0, '120'], [0.5, '210'], [1, '300']] : [[0, '50'], [0.5, '100'], [1, '150']],
-        f ? (280 - 120) / 180 : 0.9, 1, oilIcon);
+    // oil temperature: 50-150 C or 120-300 F, red from 140 C / 280 F; boost 0-21 psi
+    tachSubs(cv, il, opts);
     return cv;
 }
 
@@ -216,14 +230,13 @@ function lcd(text, unit, opts) {
     const cv = new Canvas(LCD.w, LCD.h);
     if (sport) {
         // no window: large white figures straight on the face
-        cv.clear(tech ? '#060608' : '#050506');
+        // transparent: the needle passes under the window (a black box here hid it)
         const right = centre ? LCD.w / 2 : unit ? LCD.w - 62 : LCD.w - 14;
         cv.text(text, right, tech ? 46 : 48, tech ? 40 : 52, il.lcd, { font: tech ? 'orb' : 'bold', align: centre ? 'center' : 'right', literal: true });
         if (unit) cv.text(unit, LCD.w - 10, 46, 20, il.dim, { font: tech ? 'orbm' : 'bold', align: 'right', literal: true });
         return cv;
     }
-    cv.clear('#0d0b08');
-    cv.roundRect(0, 0, LCD.w, LCD.h, 6, '#120e09');
+    // transparent: the face's own LCD well is the window, and the needle passes under it
     const right = centre ? LCD.w / 2 : unit ? LCD.w - 58 : LCD.w - 14;
     if (opts && opts.ghost) cv.text(opts.ghost, right, 45, 40, il.ghost, { font: 'num', align: 'right', literal: true });
     cv.text(text, right, 45, 40, il.lcd, { font: 'num', align: centre ? 'center' : 'right', literal: true });
@@ -300,7 +313,7 @@ function speedoFaceSport(opts) {
         cv.text(String(v), x, y + 16, mph ? 44 : 34, il.num, { font: 'bold', align: 'center', literal: true });
     }
     cv.text(mph ? 'mph' : 'km/h', C, C - 96, 24, il.dim, { font: 'bold', align: 'center', literal: true, spacing: 2 });
-    subDial(cv, il, [[0, '0'], [0.5, '1/2'], [1, '1/1']], 0, 0.125, pumpIcon);
+    subDial(cv, il, SUB, { labels: [[0, '0'], [0.5, '1/2'], [1, '1/1']], red: [0, 0.125], icon: pumpIcon });
     return cv;
 }
 
@@ -315,9 +328,7 @@ function tachFaceSport(opts) {
         cv.text(String(v / 1000), x, y + 23, 64, v >= red ? il.red : il.num, { font: 'bold', align: 'center', literal: true });
     }
     cv.text('rpm x 1000', C, C - 96, 22, il.dim, { font: 'bold', align: 'center', literal: true, spacing: 2 });
-    const f = opts.tempUnit === 'f';
-    subDial(cv, il, f ? [[0, '120'], [0.5, '210'], [1, '300']] : [[0, '50'], [0.5, '100'], [1, '150']],
-        f ? (280 - 120) / 180 : 0.9, 1, oilIcon);
+    tachSubs(cv, il, opts);
     return cv;
 }
 
@@ -355,11 +366,8 @@ function techFace(kind, opts) {
         cv.text(String(speed ? v : v / 1000), x, y + size * 0.36, size, red !== null && v >= red ? il.red : il.num, { font: 'orb', align: 'center', literal: true });
     }
     cv.text(speed ? (mph ? 'mph' : 'km/h') : 'rpm x1000', C, C - 104, 22, il.dim, { font: 'orbm', align: 'center', literal: true });
-    if (speed) subDial(cv, il, [[0, 'E'], [0.5, '1/2'], [1, 'F']], 0, 0.125, pumpIcon, 'orbm');
-    else {
-        const f = opts.tempUnit === 'f';
-        subDial(cv, il, f ? [[0, '120'], [0.5, '210'], [1, '300']] : [[0, '50'], [0.5, '100'], [1, '150']], f ? (280 - 120) / 180 : 0.9, 1, oilIcon, 'orbm');
-    }
+    if (speed) subDial(cv, il, SUB, { labels: [[0, 'E'], [0.5, '1/2'], [1, 'F']], red: [0, 0.125], icon: pumpIcon, font: 'orbm' });
+    else tachSubs(cv, il, opts, 'orbm');
     return cv;
 }
 
@@ -377,7 +385,9 @@ function dialFx(styleName, kind, opts) {
     spec.main = tech
         ? { shape: 'hollow', len: 258, tail: 36, wid: 27, ow: 3.5, glowR: 6, glowA: 0.55, fillA: 0.9, col: { edge: rgb.edge, fill: rgb.fill, glow: rgb.glow, core: rgb.core, hi: rgb.hi } }
         : { shape: 'taper', len: 270, tail: 62, wid: 15, col: rgb };
-    spec.sub = { cx: C, cy: SUB.cy, len: 66, tail: 16, wid: 8 };
+    // small needles: the fuel gauge (u_v.y) on the speedometer; oil (u_v.y) and boost (u_v.w) on the tach
+    const small = (g, u) => ({ cx: g.cx, cy: g.cy, len: Math.round(g.r * 0.85), tail: Math.round(g.r * 0.2), wid: g.r >= 70 ? 8 : 7, hr: g.r >= 70 ? 11 : 9, u });
+    spec.subs = speed ? [small(SUB, 'y')] : [small(TSUB.oil, 'y'), small(TSUB.boost, 'w')];
     const hubs = {
         classic: { r: 36, fill: [26, 26, 27], ring: [60, 60, 62], rw: 2, r1: 6.5, c1: [12, 12, 12] },
         sport: { r: 36, fill: [11, 12, 14], ring: [46, 50, 55], rw: 2.5, r1: 11.5, c1: rgb.core, r2: 5, c2: [11, 12, 14] },
@@ -395,7 +405,7 @@ function dialFx(styleName, kind, opts) {
 }
 
 module.exports = {
-    CSPEED, techFace, dialFx,
+    CSPEED, techFace, dialFx, TSUB, BOOST_MAX,
     STYLES, style, CENTER, centerInfo,
     Canvas, D, C, R_FACE, R_TICK, A0, A1, SUB, LCD, ILLUM, NEEDLE, T,
     angleOf, subAngleOf, pol, speedoFace, tachFace, lcd,

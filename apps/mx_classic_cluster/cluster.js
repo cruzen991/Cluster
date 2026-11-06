@@ -45,6 +45,7 @@ const buf = (cv) => Buffer.from(cv.d.buffer, cv.d.byteOffset, cv.d.length);
 class Needle {
     constructor(tauMs) { this.tau = tauMs; this.v = 0; this.t = 0; this.sent = null; }
     step(dt) {
+        if (!isFinite(this.v)) this.v = this.t;          // one bad sample must not freeze the needle
         const k = 1 - Math.exp(-dt / this.tau);
         this.v += (this.t - this.v) * k;
         if (Math.abs(this.t - this.v) < 1e-3) this.v = this.t;
@@ -69,7 +70,7 @@ class ClassicCluster {
         this.refs = {};
         this.state = { target: 'off', reason: '', layers: {}, budget: '' };
         this.values = { speed: 0, rpm: 0, fuel: null, oil: null, gearText: '', live: false };
-        this.needles = { speed: new Needle(70), rpm: new Needle(45), fuel: new Needle(1500), oil: new Needle(1500) };
+        this.needles = { speed: new Needle(70), rpm: new Needle(45), fuel: new Needle(1500), oil: new Needle(1500), boost: new Needle(60) };
         this.lcdText = { speed: null, gear: null };
         this.lcdAt = { speed: 0, gear: 0 };
         this.sweep = null;
@@ -192,13 +193,13 @@ class ClassicCluster {
             R[key] = ref;
             if (this.mode === 'shader') {
                 cr.pixels(ref, null, buf(face));
-                d.fx = cr.effect(Object.assign({}, base, { z: 2, x: cx - C, y: cy - C, w: D, h: D, fs: FX.shader(spec), time: true }));
-                cr.uniform(d.fx, 'u_v', [F.A0, F.SUB.a0, 0, 0]);
+                d.fx = cr.effect(Object.assign({}, base, { z: 2, x: cx - C, y: cy - C, w: D, h: D, fs: FX.shader(spec) }));
+                cr.uniform(d.fx, 'u_v', [F.A0, F.SUB.a0, 0, F.SUB.a0]);
                 R[key + 'Fx'] = d.fx;
             } else {
                 d.live = new F.Canvas(D, D);
                 d.live.d.set(face.d);
-                this.redrawDial(d, { a: F.A0, b: F.SUB.a0, lv: 0, t: 0 }, Date.now(), true);
+                this.redrawDial(d, { a: F.A0, b: F.SUB.a0, c: F.SUB.a0, lv: 0 }, Date.now(), true);
             }
             this.dials[key] = d;
         };
@@ -244,7 +245,8 @@ class ClassicCluster {
 
     /**
      * values: { speed (mph or km/h, already in the dial's units), rpm, fuel (0..1 or null),
-     *           oil (dial fraction 0..1 or null), oilC (deg C or null), speedText, gearText, live }
+     *           oil (dial fraction 0..1 or null), oilC (deg C or null), boost (dial fraction 0..1 or null),
+     *           speedText, gearText, live }
      */
     update(v) { Object.assign(this.values, v); }
 
@@ -252,21 +254,24 @@ class ClassicCluster {
         if (!this.enabled || !this.cr || !this.dials || !this.dials.tach) return;
         const s = this.getSettings(), v = this.values, n = this.needles;
         const speedMax = s.units === 'kmh' ? 260 : 160, rpmMax = tachMax(s.redline);
-        let fs = v.speed / speedMax, fr = v.rpm / rpmMax, ff = v.fuel, fo = v.oil, rpm = v.rpm;
+        let fs = v.speed / speedMax, fr = v.rpm / rpmMax, ff = v.fuel, fo = v.oil, fb = v.boost, rpm = v.rpm;
         if (this.sweep) {
             const t = (now - this.sweep.t0) / 800;
             const p = t < 1 ? ease(t) : t < 2 ? 1 - ease(t - 1) : null;
             if (p === null) this.sweep = null;
-            else { fs = fr = ff = fo = p; rpm = p * rpmMax; }
+            else { fs = fr = ff = fo = fb = p; rpm = p * rpmMax; }
         }
         n.speed.t = clamp01(fs); n.rpm.t = clamp01(fr);
-        n.fuel.t = ff == null ? 0 : clamp01(ff); n.oil.t = fo == null ? 0 : clamp01(fo);
+        n.fuel.t = ff == null ? 0 : clamp01(ff); n.oil.t = fo == null ? 0 : clamp01(fo); n.boost.t = fb == null ? 0 : clamp01(fb);
         if (this.sweep) { Object.keys(n).forEach((k) => { n[k].v = n[k].t; }); }
         else Object.keys(n).forEach((k) => n[k].step(dt));
 
-        const lv = shiftLevel(rpm, s.redline);
-        this.dialState('speedo', { a: lerp(F.A0, F.A1, n.speed.v), b: F.subAngleOf(n.fuel.v), lv: 0 }, now);
-        this.dialState('tach', { a: lerp(F.A0, F.A1, n.rpm.v), b: F.subAngleOf(n.oil.v), lv }, now);
+        // shift lights; at the redline the app flashes them (11 on, 12 off) FLASH_HZ times a second
+        let lv = shiftLevel(rpm, s.redline);
+        if (lv === 11 && Math.floor(now / 1000 * FX.FLASH_HZ * 2) % 2) lv = 12;
+        const sub0 = F.SUB.a0;
+        this.dialState('speedo', { a: lerp(F.A0, F.A1, n.speed.v), b: F.subAngleOf(n.fuel.v), c: sub0, lv: 0 }, now);
+        this.dialState('tach', { a: lerp(F.A0, F.A1, n.rpm.v), b: F.subAngleOf(n.oil.v), c: F.subAngleOf(n.boost.v), lv }, now);
 
         // LCDs
         const unit = s.units === 'kmh' ? 'km/h' : 'mph';
@@ -290,27 +295,21 @@ class ClassicCluster {
         const d = this.dials[key];
         if (!d) return;
         const o = d.st;
-        const moved = !o || Math.abs(o.a - st.a) >= MIN_STEP_DEG || Math.abs(o.b - st.b) >= MIN_STEP_DEG || o.lv !== st.lv;
+        const moved = !o || o.lv !== st.lv || ['a', 'b', 'c'].some((k) => Math.abs(o[k] - st[k]) >= MIN_STEP_DEG);
+        if (!moved) return;
         if (this.mode === 'shader') {
-            if (!moved) return;
             d.st = st; this.sends++;
-            this.cr.uniform(d.fx, 'u_v', [round2(st.a), round2(st.b), st.lv, 0]);
+            this.cr.uniform(d.fx, 'u_v', [round2(st.a), round2(st.b), st.lv, round2(st.c)]);
             return;
         }
-        st.t = now / 1000;
-        const L = d.spec.lights;
-        const phase = L && st.lv > L.n ? Math.floor(st.t * FX.FLASH_HZ * 2) : null;
-        const flashChanged = phase !== d.flash;
-        if (!moved && !flashChanged) return;
         if (now - d.at < 1000 / REDRAW_FPS) return;
-        if (o && !flashChanged && o.lv === st.lv && Math.abs(o.a - st.a) < 0.3 && Math.abs(o.b - st.b) < 0.3) return;
-        d.flash = phase;
-        this.redrawDial(d, st, now, false, flashChanged);
+        if (o.lv === st.lv && ['a', 'b', 'c'].every((k) => Math.abs(o[k] - st[k]) < 0.3)) return;
+        this.redrawDial(d, st, now, false);
     }
 
     /** Redrawn mode: recomposite face + moving parts in the changed rectangles and send those. */
-    redrawDial(d, st, now, whole, flashChanged) {
-        const rects = whole ? [{ x: 0, y: 0, w: d.spec.w, h: d.spec.h }] : FX.dirty(d.spec, d.st, st, flashChanged);
+    redrawDial(d, st, now, whole) {
+        const rects = whole ? [{ x: 0, y: 0, w: d.spec.w, h: d.spec.h }] : FX.dirty(d.spec, d.st, st);
         const face = d.face.d, live = d.live.d, Wd = d.spec.w;
         for (const q of rects) {
             for (let y = q.y; y < q.y + q.h; y++) for (let x = q.x; x < q.x + q.w; x++) {
@@ -389,7 +388,7 @@ function warmLimit(oilC, redline) {
     return redline - 2500 * (1 - t);
 }
 
-const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const clamp01 = (x) => (!(x > 0) ? 0 : x > 1 ? 1 : x);     // NaN and -Infinity: 0
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
