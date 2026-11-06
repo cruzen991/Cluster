@@ -175,7 +175,7 @@ function arcFx(opts) {
     return {
         id: 'arc-rpm', w: DW, h: DH, cx: DCX, cy: DCY, max, redline: red,
         // "red glass": a pale pink outline round a see-through red middle, a red glow
-        main: { shape: 'hollow', len: R - 4, tail: -NEEDLE_IN, inner: NEEDLE_IN, wid: 20, ow: 2.5, glowR: 7, glowA: 0.7, fillA: 0.55,
+        main: { shape: 'hollow', len: R - 4, tail: -NEEDLE_IN, inner: NEEDLE_IN, wid: 20, ow: 2.5, glowR: 6, glowA: 0.25, fillA: 0.55,
             col: { edge: [255, 150, 140], fill: [200, 20, 20], glow: NEEDLE_RED, core: NEEDLE_RED, hi: [255, 170, 170] } },
         subs: [], hub: null, subHub: null,
         ring: { r: R_PROG, w: W_PROG, a0: A0, a1: A1, aRed: A1 + 1, lit: NEEDLE_RED, red: NEEDLE_RED },
