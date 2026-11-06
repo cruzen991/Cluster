@@ -1,19 +1,20 @@
 # Classic Cluster
 
-Classic BMW round dials with orange needles on the instrument cluster of an iDrive 7 car (MGU head unit, Live Cockpit
-Professional cluster): a speedometer with a fuel gauge, a tachometer with an oil-temperature gauge, the warm-up
-segments that go out as the oil warms (off by default), two LCD windows for digital speed and gear, and a centre panel
-with the drive mode, the speed, the range and the odometer. By default the stock gauges are hidden behind a black background while the dials are on; BMW's
-warning and indicator lights are drawn by the cluster above it.
+Round dials on the instrument cluster of an iDrive 7 car (MGU head unit, Live Cockpit Professional cluster): a
+speedometer with a fuel gauge, a tachometer with an oil-temperature gauge and a gear window, and a centre panel with
+the drive mode, the speed, the range and the odometer. By default the stock gauges are hidden behind a black
+background while the dials are on; BMW's warning and indicator lights are drawn by the cluster above it.
 
-![The sport style](docs/cluster.png)
+![The Tech style](docs/cluster.png)
 
-![The classic style](docs/classic.png)
+Three gauge styles (Settings → *Gauge style*), all 0-160 mph by default (0-260 km/h in km/h):
 
-Two gauge styles (Settings → *Gauge style*): **Sport** (the default: rimless faces, white markings, red needles, a
-large white digital speed) and **Classic** (the first design: chrome rings, orange markings, orange-red needles). Both
-read 0-160 mph by default (0-260 km/h in km/h). The centre panel shows the current drive mode as text (Comfort,
-Sport, Sport Plus, Eco Pro, ...), the speed in large figures, the range and the odometer.
+- **Tech** (the default): Orbitron numerals, hollow red needles with a glow, a white ring along each dial that lights
+  up behind the needle, and **shift lights**: ten segments outside the tach over the 2,000 rpm below the redline,
+  lighting green, then yellow, then red, one more every 200 rpm, and all flashing red from the redline (setting
+  *Shift lights*, on).
+- **Sport**: rimless faces, bold white markings, solid red needles ([picture](docs/sport.png)).
+- **Classic**: chrome rings, orange markings, orange-red needles ([picture](docs/classic.png)).
 
 It is an app for the [MGU Store](https://github.com/robertnisipeanu/mgu-store). It draws through
 [cluster-render](https://github.com/robertnisipeanu/idrive-apps/tree/main/native/cluster-render) on the cluster's
@@ -82,7 +83,7 @@ The app's own loop catches its errors, but a freeze is not something it can see 
 |---|---|
 | Speedometer, 0-160 mph (inner km/h scale) or 0-260 km/h | `Vehicle2.statusCarSpeed2` |
 | Tachometer, scale to redline + 500 rpm, red from the redline | `CDS.statusEngineSpeed2` |
-| Warm-up segments (setting *Warm-up lights on the tach*, off by default): lit from the rpm allowed now to the redline; all lit at 40 °C oil or colder, none from 80 °C | `CDS.statusEngineTemperature` (oil) |
+| Shift lights (Tech style) | `CDS.statusEngineSpeed2` |
 | Oil temperature, 120-300 °F or 50-150 °C | `CDS.statusEngineTemperature` |
 | Fuel, 0-1/1 | `KombiIF.statusRangeTankStatus` (litres) over the tank size setting |
 | Gear LCD: P, R, N, D1-D8 | `VehicleInformation.statusGearboxDrive` / `DataPowerTrain2` |
@@ -93,10 +94,11 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which othe
 
 ## Settings
 
-Show on the cluster; stock cluster hidden (default) or showing between the dials; mph or km/h; °F or °C; classic orange or white dial lighting; redline (7000 for a B58); the needle
-sweep at start; dials only or black sides; tank size (59 l for a G20 M340i); moving the dials apart, together, up or
-down; needles drawn by a shader (default) or as turned images; retry after BMW pop-ups (off); demo data on the
-cluster (never, by default).
+Show on the cluster; gauge style (Tech, Sport, Classic); shift lights (on); stock cluster hidden (default) or showing
+between the dials; mph or km/h; °F or °C; classic orange or white dial lighting (Classic style); redline (7000 for a
+B58); the needle sweep at start; tank size (59 l for a G20 M340i); moving the dials apart, together, up or down;
+needles drawn by a shader (default) or redrawn images; retry after BMW pop-ups (off); demo data on the cluster
+(never, by default).
 
 The *Needle sweep* button sweeps whatever the *Needle sweep at start* setting says (that setting only controls the
 automatic one); the app's screen says when it runs, or why it did not (the cluster off, or the car moving).
@@ -135,13 +137,15 @@ again, press the controller's MENU or HOME button, or hold the volume knob down 
 
 | Path | |
 |---|---|
-| `apps/mx_classic_cluster/faces.js` | the artwork: faces, needles, hubs, warm-up segments, LCDs (pure JavaScript) |
+| `apps/mx_classic_cluster/faces.js` | the still artwork: faces, LCDs, the centre panel; and each style's moving parts as numbers |
+| `apps/mx_classic_cluster/fx.js` | the moving parts (needles, hubs, lit ring, shift lights) as a shader and as its JavaScript twin |
 | `apps/mx_classic_cluster/cluster.js` | the cluster layers through cluster-render, needle smoothing, the sweep |
 | `apps/mx_classic_cluster/main.js` | the app: car data, on/off, safety rules, its own screen |
 | `apps/mx_classic_cluster/modes.js` | the drive mode as text |
 | `apps/mx_classic_cluster/guard.js` | turns the cluster off by itself after repeated failures (above) |
 | `apps/mx_classic_cluster/cluster_render_client.js` | cluster-render's Node client (MPL-2.0, unchanged) |
 | `apps/mx_classic_cluster/test.js` | `node apps/mx_classic_cluster/test.js` |
+| `kit/runtime/fonts/orb*.json` | Orbitron, baked for the kit's canvas (SIL Open Font License, `OFL-Orbitron.txt`) |
 | `kit/` | the app kit from [cauliflowermossgrape/idrive7-apps](https://github.com/cauliflowermossgrape/idrive7-apps) (MIT) |
 
 Preview on a PC (no SDK, nothing installable): `python3 kit/tools/build.py --preview-only mx_classic_cluster`,
@@ -149,32 +153,35 @@ then `node kit/tools/preview.js dist/mx_classic_cluster preview wait=8 render`.
 
 ## How the cluster is drawn
 
-The faces, LCDs, centre panel, warm-up segments and hubs are image layers that are never turned: the kind of layer
-the Waze map, the one thing checked on cars, also is. The faces are drawn once (about 3.8 MB uploaded at start,
-within cluster-render's shared link budget); only the LCD windows and the centre panel are redrawn, about 200 KB/s
-while the speed changes.
+**cluster-render lets one app have at most 8 layers** (and 32 for all apps together); a layer over the limit is
+refused with "too many layers". Versions up to 0.6 asked for about 15, and the needles, made last, were the ones
+refused: that is why the dials showed on the car and the needles did not. From 0.7 the app uses at most 7:
 
-The needles, four ways (setting *Needles drawn by*):
+| Layer | |
+|---|---|
+| background | a 16x16 black image stretched over the whole cluster (only with *Stock cluster: hidden*) |
+| centre panel | drive mode, speed, range, odometer; a speed change sends only the speed's rectangle |
+| speedometer face, tachometer face | still images, drawn once |
+| speedometer moving parts, tachometer moving parts | needle, hub, small needle, lit ring and shift lights of one dial, together (`fx.js`) |
+| gear window | on the tach |
+| (speed window) | on the speedometer, only when the centre panel is off |
 
-- **Shader (default):** each needle is an unturned quad over its sweep; a fragment shader draws it at the angle in
-  one uniform, so moving a needle sends a few bytes. Smooth.
-- **Redrawn images:** the needle is drawn by the app into an unturned image over its sweep, and only the pieces that
-  changed are sent, at most 8 times a second. Uses only the kind of layer the dials are, so it is the safest bet, but
-  it is choppier and heavy on the link (about 2 MB/s with the needles moving all the time), and has no sweep.
-- **Turned images, sharp / smooth:** a needle image the renderer turns about its pivot, sampled nearest or bilinear.
+The moving parts, two ways (setting *Needles drawn by*):
 
-What the first car test showed (0.2.0, turned images, smooth): the dials, LCDs, centre panel and background showed,
-the needles did not. So either the cluster does not draw turned layers, or it does not draw bilinear sampling. The
-sharp option tells those two apart; the shader and redrawn options avoid both. Try them in this order: shader,
-redrawn, sharp.
+- **Shader (default):** each dial's moving parts are one effect layer drawn by a fragment shader; the state is one
+  uniform (4 numbers) and the flash runs on the renderer's own clock, so a frame costs a few bytes. Smooth.
+- **Redrawn images:** no shaders at all. The app draws the same picture (`fx.js` has a JavaScript twin of the
+  shader) into the face image itself and sends only the rectangles that changed, at most 6 times a second per dial:
+  choppier, 1-4 MB/s of the link while the needles move, and real CPU work on the head unit. Use it only if the
+  shader shows nothing.
 
-**Diagnostics.** With the cluster on, the bottom of the app's screen lists, per group of layers (background, centre,
-dials, lcds, segments, needles, hubs), what cluster-render reports for them (shown, waiting, stalled, hidden, error)
-and why, how many needle moves were sent, and any message the renderer refused. A photo of that screen says where a
-problem is.
+The app's screen in the head unit shows *Layers: n of 8* and, per group (background, centre, dials, moving, lcds),
+what cluster-render reports for them (shown, waiting, stalled, hidden, error) and why. A photo of that screen says
+where a problem is.
 
 ## Licences
 
-The app's own files (`faces.js`, `cluster.js`, `guard.js`, `main.js`, `test.js`): MIT. `cluster_render_client.js`: MPL-2.0
+The app's own files (`faces.js`, `fx.js`, `cluster.js`, `guard.js`, `main.js`, `modes.js`, `test.js`): MIT. Orbitron
+(`kit/runtime/fonts/orb*.json`): SIL Open Font License 1.1, The Orbitron Project Authors. `cluster_render_client.js`: MPL-2.0
 (Robert Nisipeanu). `kit/`: MIT (cauliflowermossgrape, `kit/LICENSE-idrive7-apps`). Not affiliated with or endorsed by
 BMW AG.

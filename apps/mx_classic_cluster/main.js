@@ -42,9 +42,9 @@ mgu.run({
             dy: Number(settings.get('dy')) || 0,
             demo: settings.get('demo') === 'on',
             retake: settings.get('retake') === true,
-            style: settings.get('style') === 'classic' ? 'classic' : 'sport',
-            warmup: settings.get('warmup') === true,
-            needles: ['image', 'sharp', 'redraw'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'shader',
+            style: ['classic', 'sport'].indexOf(settings.get('style')) >= 0 ? settings.get('style') : 'tech',
+            shift: settings.get('shift') !== false,
+            needles: settings.get('needles') === 'redraw' ? 'redraw' : 'shader',
         });
 
         // fuel: litres in the tank from the cluster's own range / tank status
@@ -163,7 +163,7 @@ mgu.run({
                     return n + ' ' + Object.keys(g.counts).map((k) => g.counts[k] + ' ' + k).join('/') + (g.why ? ' (' + g.why + ')' : '');
                 }).join(' | ');
                 const sweepNote = sweepMsg && Date.now() - sweepMsg.at < 4000 ? '  Sweep: ' + sweepMsg.text : (st.sweeping ? '  Sweeping' : '');
-                const lines = ['Needles: ' + st.mode + ', ' + st.sends + ' moves sent' + sweepNote]
+                const lines = ['Layers: ' + st.layers + ' of 8   Needles: ' + st.mode + ', ' + st.sends + ' updates sent' + sweepNote]
                     .concat(wrap(groups, 74))
                     .concat(st.refused ? wrap('Refused ' + st.refused + ': ' + st.lastRefused, 74) : []);
                 lines.slice(0, 5).forEach((line, i) => cv.text(line, mid, 420 + i * 22, 17, t.dim, { align: 'center', literal: true }));

@@ -1,34 +1,37 @@
 'use strict';
 /**
- * cluster.js - puts the classic dials on the instrument cluster through cluster-render
+ * cluster.js - puts the dials on the instrument cluster through cluster-render
  * (robertnisipeanu/idrive-apps, native/cluster-render): its `panel` target, the whole
  * 1920x720 cluster over the stock gauges.
  *
- * Layers (all image layers; nothing here uses a shader, a mesh or an animation):
- *   faces      the speedometer and tachometer, drawn once (and again only when a setting
- *              that changes them does)
- *   lcds       two small windows: digital speed and gear, redrawn only when their text changes
- *   segments   the warm-up segments in the tach, each its own tiny layer, shown while lit
- *   needles    two main and two small needles, drawn once and turned by the renderer
- *              (the layer's `rotate`), so moving a needle sends a few bytes of JSON
- *   hubs       the caps over the needles' pivots
- *   backdrop   a black panel over the whole stock cluster (a 16x16 image stretched by the renderer,
- *              so it costs 1 KB, not 5.5 MB) and a centre panel with the clock, range and odometer;
- *              BMW's warning and indicator lights are drawn above the panel by the cluster itself
+ * cluster-render gives one app at most 8 layers (CompositorLimits.per_client) and 32 for all
+ * apps together; a layer over the limit is refused ("too many layers"). Versions up to 0.6 asked
+ * for about 15, and the needles, made last, were the ones refused. Now (at most 7):
  *
- * Values come in through update(values); a 30 Hz loop smooths the needles and sends a
- * rotation only when one moved by more than 0.1 degree.
+ *   back       a black panel over the whole stock cluster (a 16x16 image stretched by the
+ *              renderer), with "Stock cluster: hidden"; BMW's warning lights stay above it
+ *   centre     drive mode, speed, range and odometer, one image; a speed change sends only
+ *              the speed's rectangle
+ *   faces x2   the speedometer and the tachometer, still images
+ *   fx x2      everything on a dial that moves (fx.js): needle, hub, small needle and hub, and
+ *              in the tech style the lit ring and the shift lights. Either an effect layer
+ *              drawn by a shader (needles "Shader"), state in one uniform; or nothing, with the
+ *              same picture composited into the face image itself, sending only the changed
+ *              rectangles (needles "Redrawn images", no shaders at all)
+ *   gear       the gear window on the tach
+ *   speed      the speed window on the speedometer, only when there is no centre panel
  */
 const F = require('./faces');
+const FX = require('./fx');
 const { ClusterRender } = require('./cluster_render_client');
 
 const TARGET = 'panel';
 const W = 1920, H = 720;
 const FPS = 30;
 const MIN_STEP_DEG = 0.1;
-const LCD_MIN_MS = 200;
-const REDRAW_FPS = 8;             // redraw mode: needle updates a second at most
-const REDRAW_PIECES = 8;           // and pieces per needle (old and new: at most 16 rectangles)            // an LCD's text is redrawn at most 5 times a second
+const LCD_MIN_MS = 200;            // an LCD's text is redrawn at most 5 times a second
+const REDRAW_FPS = 6;              // redrawn mode: dial updates a second at most (each costs CPU)
+const MAX_LAYERS = 8;              // cluster-render's per-client limit
 
 /* where the two dials sit on the panel; dx moves both outwards (+) or inwards (-) */
 function layout(dx, dy) {
@@ -69,7 +72,6 @@ class ClassicCluster {
         this.needles = { speed: new Needle(70), rpm: new Needle(45), fuel: new Needle(1500), oil: new Needle(1500) };
         this.lcdText = { speed: null, gear: null };
         this.lcdAt = { speed: 0, gear: 0 };
-        this.segLit = [];
         this.sweep = null;
         this.timer = null;
         this.enabled = false;
@@ -107,7 +109,6 @@ class ClassicCluster {
         this.state = { target: 'connecting', reason: '', layers: {}, why: {}, budget: '' };
         this.refs = {}; this.faceKey = '';
         this.lcdText = { speed: null, gear: null };
-        this.segLit = [];
         Object.keys(this.needles).forEach((k) => { this.needles[k].sent = null; });
         cr.on('ready', () => this.log.info('cluster-render: backend ' + cr.backend + ', targets ' + cr.targets));
         cr.on('disconnected', () => {
@@ -150,7 +151,7 @@ class ClassicCluster {
     build() {
         const s = this.getSettings();
         const L = layout(s.dx, s.dy);
-        const key = JSON.stringify([s.warmup, s.style, s.units, s.illum, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
+        const key = JSON.stringify([s.shift, s.style, s.units, s.illum, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
         if (!this.cr || key === this.faceKey) return;
         const first = !this.faceKey;
         this.faceKey = key;
@@ -158,123 +159,73 @@ class ClassicCluster {
         const cr = this.cr, r = this.refs;
         const D = F.D, C = F.C;
 
-        const speedo = F.speedoFace({ style: s.style, units: s.units, illum: s.illum });
-        const tach = F.tachFace({ style: s.style, illum: s.illum, redline: s.redline, max: tachMax(s.redline), tempUnit: s.tempUnit });
+        const centre = s.backdrop === 'full';
+        const max = tachMax(s.redline);
+        const faceOpts = { style: s.style, units: s.units, illum: s.illum, redline: s.redline, max, tempUnit: s.tempUnit };
+        const speedo = F.speedoFace(Object.assign({ well: !centre }, faceOpts));
+        const tach = F.tachFace(faceOpts);
 
-        if (!first) Object.keys(r).forEach((k) => { if (Array.isArray(r[k])) r[k].forEach((x) => cr.drop(x)); else cr.drop(r[k]); });
+        if (!first) Object.keys(r).forEach((k) => cr.drop(r[k]));
         this.refs = {};
         const R = this.refs;
         // contend 0 (the default): wait for the slot to be free and never retry against BMW's
         // own content; the panel never takes a slot from the stock HMI either way
         // (cluster-render's panel_take_over_stock is 0)
-        const img = (o) => cr.image(Object.assign({ target: TARGET, visible: true, contend: s.retake ? 1 : 0 }, o));
+        const base = { target: TARGET, visible: true, contend: s.retake ? 1 : 0 };
+        const img = (o) => cr.image(Object.assign({}, base, o));
 
-        if (s.backdrop === 'full') {
+        if (centre) {
             const black = new F.Canvas(16, 16).clear('#000000');
             R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: 16, ih: 16 });
             cr.pixels(R.back, null, buf(black));
-            const cx0 = Math.round(W / 2 - F.CENTER.w / 2), cy0 = Math.round(H / 2 - F.CENTER.h / 2);
-            R.center = img({ z: 1, x: cx0, y: cy0, w: F.CENTER.w, h: F.CENTER.h });
-            R.lcdCenter = img({ z: 2, x: cx0 + Math.round((F.CENTER.w - F.CSPEED.w) / 2), y: cy0 + F.CSPEED.y, w: F.CSPEED.w, h: F.CSPEED.h });
-            this.centerText = null;
+            R.center = img({ z: 1, x: Math.round(W / 2 - F.CENTER.w / 2), y: Math.round(H / 2 - F.CENTER.h / 2), w: F.CENTER.w, h: F.CENTER.h });
+            this.centerKey = null; this.centerSpeed = null; this.centerAt = 0;
         }
 
-        R.speedo = img({ z: 0, x: L.speedo.cx - C, y: L.speedo.cy - C, w: D, h: D });
-        cr.pixels(R.speedo, null, buf(speedo));
-        R.tach = img({ z: 0, x: L.tach.cx - C, y: L.tach.cy - C, w: D, h: D });
-        cr.pixels(R.tach, null, buf(tach));
-
-        // LCDs
-        const lcdX = (cx) => cx - F.LCD.w / 2, lcdY = (cy) => cy - C + F.LCD.y;
-        R.lcdSpeed = img({ z: 1, x: lcdX(L.speedo.cx), y: lcdY(L.speedo.cy), w: F.LCD.w, h: F.LCD.h });
-        R.lcdGear = img({ z: 1, x: lcdX(L.tach.cx), y: lcdY(L.tach.cy), w: F.LCD.w, h: F.LCD.h });
-        this.lcdText = { speed: null, gear: null, center: null };
-
-        // warm-up segments (setting "Warm-up lights", off by default): one per 250 rpm over the 2500 rpm below the redline
-        // (each drawn already turned, so no layer here is turned by the renderer)
-        R.segs = [];
-        this.segRpm = [];
-        const max = tachMax(s.redline);
-        for (let v = s.redline - 2500; s.warmup && v < s.redline; v += 250) {
-            const a = F.angleOf(v + 125, 0, max);
-            const [x, y] = F.pol(L.tach.cx, L.tach.cy, F.SEG.r, a);
-            const ref = img({ z: 1, x: Math.round(x - F.SEG.box / 2), y: Math.round(y - F.SEG.box / 2), w: F.SEG.box, h: F.SEG.box,
-                visible: false });
-            cr.pixels(ref, null, buf(F.segment(a)));
-            R.segs.push(ref);
-            this.segRpm.push(v);
-        }
-        this.segLit = R.segs.map(() => false);
-
-        // needles: main 270 px tip, 62 px tail; small ones 66 / 16
-        const pal = F.style(s.style);
-        this.pal = pal;
-        const big = Object.assign(F.needle(270, 62, 15, true, pal.needle), { len: 270, tail: 62, wid: 15 });
-        const small = Object.assign(F.needle(66, 16, 8, true, pal.needle), { len: 66, tail: 16, wid: 8 });
-        const hubBig = F.hub(36, s.style), hubSmall = F.hub(11, s.style);
-        // Two ways to draw a needle (setting "Needles"):
-        //   shader  an unturned quad over the needle's sweep; a fragment shader draws the needle at
-        //           the angle in the uniform u_a. Moving it sends a uniform.
-        //   image   a needle image turned by the renderer about its pivot (the layer's rotate).
-        this.mode = ['image', 'sharp', 'redraw'].indexOf(s.needles) >= 0 ? s.needles : 'shader';
-        this.redraw = {};
-        const place = (n, cx, cy, z) => {
+        this.mode = s.needles === 'redraw' ? 'redraw' : 'shader';
+        this.dials = {};
+        const dial = (key, face, kind, cx, cy) => {
+            const ref = img({ z: 0, x: cx - C, y: cy - C, w: D, h: D });
+            const spec = F.dialFx(s.style, kind, faceOpts);
+            if (!s.shift) spec.lights = null;
+            const d = { ref, spec, face, st: null, at: 0, flash: null };
+            R[key] = ref;
             if (this.mode === 'shader') {
-                const reach = Math.ceil(Math.max(n.len, n.tail) + 10);
-                const box = Math.min(2 * reach, D);
-                const x = Math.max(0, Math.round(cx - box / 2)), y = Math.max(0, Math.round(cy - box / 2));
-                const w = Math.min(box, W - x), h = Math.min(box, H - y);
-                const sp = { w, h, px: cx - x, py: cy - y, len: n.len, tail: n.tail, wid: n.wid, col: pal.rgb };
-                const ref = cr.effect({ target: TARGET, z, x, y, w, h, fs: F.needleShader(sp), contend: s.retake ? 1 : 0 });
-                cr.uniform(ref, 'u_a', [F.A0]);
-                return ref;
+                cr.pixels(ref, null, buf(face));
+                d.fx = cr.effect(Object.assign({}, base, { z: 2, x: cx - C, y: cy - C, w: D, h: D, fs: FX.shader(spec), time: true }));
+                cr.uniform(d.fx, 'u_v', [F.A0, F.SUB.a0, 0, 0]);
+                R[key + 'Fx'] = d.fx;
+            } else {
+                d.live = new F.Canvas(D, D);
+                d.live.d.set(face.d);
+                this.redrawDial(d, { a: F.A0, b: F.SUB.a0, lv: 0, t: 0 }, Date.now(), true);
             }
-            if (this.mode === 'redraw') {
-                // an unturned image over the needle's sweep, the needle drawn into it here and only the
-                // pieces that changed sent (the kind of layer the dials themselves are)
-                const reach = Math.ceil(Math.max(n.len, n.tail) + 14);
-                const box = Math.min(2 * reach, D);
-                const x = Math.max(0, Math.round(cx - box / 2)), y = Math.max(0, Math.round(cy - box / 2));
-                const w = Math.min(box, W - x), h = Math.min(box, H - y);
-                const cv = new F.Canvas(w, h);
-                const r = { cv, px: cx - x, py: cy - y, n, ang: F.A0, at: 0 };
-                F.drawNeedleAt(cv, r.px, r.py, F.A0, n.len, n.tail, n.wid, REDRAW_PIECES, pal.needle);
-                const ref = img({ z, x, y, w, h });
-                cr.pixels(ref, null, buf(cv));
-                this.redraw[ref] = r;
-                return ref;
-            }
-            const ref = img({ z, x: Math.round(cx - n.px), y: Math.round(cy - n.py), w: n.w, h: n.h,
-                px: n.px, py: n.py, rotate: F.A0, sampling: this.mode === 'sharp' ? 'nearest' : 'bilinear' });
-            cr.pixels(ref, null, buf(n.cv));
-            return ref;
+            this.dials[key] = d;
         };
-        const cap = (h, cx, cy, z) => {
-            const ref = img({ z, x: Math.round(cx - h.w / 2), y: Math.round(cy - h.h / 2), w: h.w, h: h.h });
-            cr.pixels(ref, null, buf(h.cv));
-            return ref;
-        };
-        const subY = (cy) => cy - C + F.SUB.cy;
-        R.fuel = place(small, L.speedo.cx, subY(L.speedo.cy), 2);
-        R.oil = place(small, L.tach.cx, subY(L.tach.cy), 2);
-        R.fuelHub = cap(hubSmall, L.speedo.cx, subY(L.speedo.cy), 3);
-        R.oilHub = cap(hubSmall, L.tach.cx, subY(L.tach.cy), 3);
-        R.speed = place(big, L.speedo.cx, L.speedo.cy, 4);
-        R.rpm = place(big, L.tach.cx, L.tach.cy, 4);
-        R.speedHub = cap(hubBig, L.speedo.cx, L.speedo.cy, 5);
-        R.rpmHub = cap(hubBig, L.tach.cx, L.tach.cy, 5);
+        dial('speedo', speedo, 'speed', L.speedo.cx, L.speedo.cy);
+        dial('tach', tach, 'rpm', L.tach.cx, L.tach.cy);
+
+        // LCDs: the gear on the tach; the speed on the speedometer only without the centre panel
+        const lcdX = (cx) => cx - F.LCD.w / 2, lcdY = (cy) => cy - C + F.LCD.y;
+        if (!centre) R.lcdSpeed = img({ z: 1, x: lcdX(L.speedo.cx), y: lcdY(L.speedo.cy), w: F.LCD.w, h: F.LCD.h });
+        R.lcdGear = img({ z: 3, x: lcdX(L.tach.cx), y: lcdY(L.tach.cy), w: F.LCD.w, h: F.LCD.h });
+        this.lcdText = { speed: null, gear: null };
+        this.lcdAt = { speed: 0, gear: 0 };
+
+        const count = Object.keys(R).length;
+        if (count > MAX_LAYERS) this.log.warn(count + ' layers asked for, more than cluster-render allows one app (' + MAX_LAYERS + ')');
 
         // which group each layer is in, for the app's diagnostics
         this.groups = {};
         const g = (name, refs) => refs.forEach((ref) => { if (ref) this.groups[ref] = name; });
         g('background', [R.back]); g('centre', [R.center]); g('dials', [R.speedo, R.tach]);
-        g('lcds', [R.lcdSpeed, R.lcdGear, R.lcdCenter]); g('segments', R.segs);
-        g('needles', [R.speed, R.rpm, R.fuel, R.oil]); g('hubs', [R.fuelHub, R.oilHub, R.speedHub, R.rpmHub]);
+        g('moving', [R.speedoFx, R.tachFx]); g('lcds', [R.lcdSpeed, R.lcdGear]);
         this.state.layers = {}; this.state.why = {};
         this.sends = 0;
+        this.layerCount = count;
 
         Object.keys(this.needles).forEach((k) => { this.needles[k].sent = null; });
-        this.log.info('faces drawn in ' + (Date.now() - t0) + ' ms');
+        this.log.info(count + ' layers, faces drawn in ' + (Date.now() - t0) + ' ms');
     }
 
     /**
@@ -286,7 +237,6 @@ class ClassicCluster {
         if (auto && !this.getSettings().sweep) return 'off in the settings';
         if (!this.enabled || !this.cr) return 'the cluster is off';
         if (this.values.live && this.values.speed > 1) return 'not while moving';     // never while moving
-        if (this.mode === 'redraw') return 'not with redrawn needles (too much data)';
         this.sweep = { t0: Date.now() };
         this.log.info('needle sweep');
         return '';
@@ -299,97 +249,87 @@ class ClassicCluster {
     update(v) { Object.assign(this.values, v); }
 
     tick(dt, now) {
-        if (!this.enabled || !this.cr || !this.refs.segs) return;
+        if (!this.enabled || !this.cr || !this.dials || !this.dials.tach) return;
         const s = this.getSettings(), v = this.values, n = this.needles;
         const speedMax = s.units === 'kmh' ? 260 : 160, rpmMax = tachMax(s.redline);
-        let fs = v.speed / speedMax, fr = v.rpm / rpmMax, ff = v.fuel, fo = v.oil;
+        let fs = v.speed / speedMax, fr = v.rpm / rpmMax, ff = v.fuel, fo = v.oil, rpm = v.rpm;
         if (this.sweep) {
             const t = (now - this.sweep.t0) / 800;
             const p = t < 1 ? ease(t) : t < 2 ? 1 - ease(t - 1) : null;
             if (p === null) this.sweep = null;
-            else { fs = fr = ff = fo = p; }
+            else { fs = fr = ff = fo = p; rpm = p * rpmMax; }
         }
         n.speed.t = clamp01(fs); n.rpm.t = clamp01(fr);
         n.fuel.t = ff == null ? 0 : clamp01(ff); n.oil.t = fo == null ? 0 : clamp01(fo);
         if (this.sweep) { Object.keys(n).forEach((k) => { n[k].v = n[k].t; }); }
         else Object.keys(n).forEach((k) => n[k].step(dt));
 
-        const send = (k, ang) => {
-            if (n[k].sent !== null && Math.abs(n[k].sent - ang) < MIN_STEP_DEG) return;
-            if (this.mode === 'redraw') {
-                const r = this.redraw[this.refs[k]];
-                if (!r || (now - r.at < 1000 / REDRAW_FPS) || Math.abs(r.ang - ang) < 0.3) return;
-                n[k].sent = ang; this.sends++;
-                this.redrawNeedle(this.refs[k], r, ang, now);
-                return;
-            }
-            n[k].sent = ang;
-            this.sends++;
-            const deg = Math.round(ang * 100) / 100;
-            if (this.mode === 'shader') this.cr.uniform(this.refs[k], 'u_a', [deg]);
-            else this.cr.set(this.refs[k], { rotate: deg });
-        };
-        send('speed', lerp(F.A0, F.A1, n.speed.v));
-        send('rpm', lerp(F.A0, F.A1, n.rpm.v));
-        send('fuel', F.subAngleOf(n.fuel.v));
-        send('oil', F.subAngleOf(n.oil.v));
-
-        // warm-up segments: lit from the rpm the engine may use now up to the redline
-        const allowed = warmLimit(v.oilC, s.redline);
-        this.refs.segs.forEach((ref, i) => {
-            const lit = !this.sweep && allowed !== null && this.segRpm[i] + 250 > allowed;
-            if (lit !== this.segLit[i]) { this.segLit[i] = lit; this.cr.set(ref, { visible: lit }); }
-        });
+        const lv = shiftLevel(rpm, s.redline);
+        this.dialState('speedo', { a: lerp(F.A0, F.A1, n.speed.v), b: F.subAngleOf(n.fuel.v), lv: 0 }, now);
+        this.dialState('tach', { a: lerp(F.A0, F.A1, n.rpm.v), b: F.subAngleOf(n.oil.v), lv }, now);
 
         // LCDs
         const unit = s.units === 'kmh' ? 'km/h' : 'mph';
-        this.lcd('speed', this.refs.lcdSpeed, this.sweep ? '888' : v.speedText, unit, now, s, false);
+        if (this.refs.lcdSpeed) this.lcd('speed', this.refs.lcdSpeed, this.sweep ? '888' : v.speedText, unit, now, s, false);
         this.lcd('gear', this.refs.lcdGear, this.sweep ? '88' : v.gearText, '', now, s, true);
         if (this.refs.center) {
-            const key = [v.rangeText, v.odoText, v.modeText, s.illum, s.style].join('|');
-            if (key !== this.centerText) {
-                this.centerText = key;
-                this.cr.pixels(this.refs.center, null, buf(F.centerInfo(v.rangeText || '---', v.odoText || '---', { illum: s.illum, style: s.style, mode: v.modeText || '' })));
-            }
-            const text = this.sweep ? '888' : (v.speedText == null ? '' : String(v.speedText));
-            if (text !== this.lcdText.center && now - (this.lcdAt.center || 0) >= LCD_MIN_MS) {
-                this.lcdText.center = text; this.lcdAt.center = now;
-                this.cr.pixels(this.refs.lcdCenter, null, buf(F.centerSpeed(text, unit, { illum: s.illum, style: s.style })));
+            const key = [v.rangeText, v.odoText, v.modeText, s.illum, s.style, unit].join('|');
+            const sp = this.sweep ? '888' : (v.speedText == null ? '' : String(v.speedText));
+            const all = key !== this.centerKey;
+            if (all || (sp !== this.centerSpeed && now - this.centerAt >= LCD_MIN_MS)) {
+                const cv = F.centerInfo(v.rangeText || '---', v.odoText || '---', { illum: s.illum, style: s.style, mode: v.modeText || '', speed: sp, unit });
+                if (all) this.cr.pixels(this.refs.center, null, buf(cv));
+                else this.cr.pixels(this.refs.center, [F.CSPEED], crop(cv, F.CSPEED));
+                this.centerKey = key; this.centerSpeed = sp; this.centerAt = now;
             }
         }
     }
 
-    /** Redraw mode: clear where the needle was, draw it where it is, send only those pieces. */
-    redrawNeedle(ref, r, ang, now) {
-        const n = r.n, cv = r.cv, d = cv.d;
-        const clip = (q) => {
-            const x0 = Math.max(0, q.x), y0 = Math.max(0, q.y), x1 = Math.min(cv.w, q.x + q.w), y1 = Math.min(cv.h, q.y + q.h);
-            return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
-        };
-        const old = F.needleRects(r.px, r.py, r.ang, n.len, n.tail, n.wid, REDRAW_PIECES);
-        const now2 = F.needleRects(r.px, r.py, ang, n.len, n.tail, n.wid, REDRAW_PIECES);
-        // one rectangle per piece where the old and the new piece overlap enough, else both
-        let rects = [];
-        old.forEach((a, i) => {
-            const b = now2[i], u = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) };
-            u.w = Math.max(a.x + a.w, b.x + b.w) - u.x; u.h = Math.max(a.y + a.h, b.y + b.h) - u.y;
-            if (u.w * u.h <= 1.5 * (a.w * a.h + b.w * b.h)) rects.push(u); else rects.push(a, b);
-        });
-        rects = rects.map(clip).filter(Boolean);
-        rects.forEach((q) => { for (let y = q.y; y < q.y + q.h; y++) d.fill(0, (y * cv.w + q.x) * 4, (y * cv.w + q.x + q.w) * 4); });
-        F.drawNeedleAt(cv, r.px, r.py, ang, n.len, n.tail, n.wid, REDRAW_PIECES, this.pal.needle);
-        r.ang = ang; r.at = now;
-        const bytes = rects.reduce((t, q) => t + q.w * q.h * 4, 0);
-        if (rects.length > 16) { this.cr.pixels(ref, null, buf(cv)); return; }
-        const out = Buffer.alloc(bytes);
-        let off = 0;
-        rects.forEach((q) => { for (let y = q.y; y < q.y + q.h; y++) { Buffer.from(d.buffer, d.byteOffset + (y * cv.w + q.x) * 4, q.w * 4).copy(out, off); off += q.w * 4; } });
-        this.cr.pixels(ref, rects, out);
+    /** A dial's moving parts to a new state: a uniform (shader), or changed rectangles (redrawn). */
+    dialState(key, st, now) {
+        const d = this.dials[key];
+        if (!d) return;
+        const o = d.st;
+        const moved = !o || Math.abs(o.a - st.a) >= MIN_STEP_DEG || Math.abs(o.b - st.b) >= MIN_STEP_DEG || o.lv !== st.lv;
+        if (this.mode === 'shader') {
+            if (!moved) return;
+            d.st = st; this.sends++;
+            this.cr.uniform(d.fx, 'u_v', [round2(st.a), round2(st.b), st.lv, 0]);
+            return;
+        }
+        st.t = now / 1000;
+        const L = d.spec.lights;
+        const phase = L && st.lv > L.n ? Math.floor(st.t * FX.FLASH_HZ * 2) : null;
+        const flashChanged = phase !== d.flash;
+        if (!moved && !flashChanged) return;
+        if (now - d.at < 1000 / REDRAW_FPS) return;
+        if (o && !flashChanged && o.lv === st.lv && Math.abs(o.a - st.a) < 0.3 && Math.abs(o.b - st.b) < 0.3) return;
+        d.flash = phase;
+        this.redrawDial(d, st, now, false, flashChanged);
+    }
+
+    /** Redrawn mode: recomposite face + moving parts in the changed rectangles and send those. */
+    redrawDial(d, st, now, whole, flashChanged) {
+        const rects = whole ? [{ x: 0, y: 0, w: d.spec.w, h: d.spec.h }] : FX.dirty(d.spec, d.st, st, flashChanged);
+        const face = d.face.d, live = d.live.d, Wd = d.spec.w;
+        for (const q of rects) {
+            for (let y = q.y; y < q.y + q.h; y++) for (let x = q.x; x < q.x + q.w; x++) {
+                const i = (y * Wd + x) * 4;
+                const fx = FX.shade(d.spec, x + 0.5, y + 0.5, st);
+                const fa = fx[3] / 255, ba = face[i + 3] / 255, oa = fa + ba * (1 - fa);
+                if (oa <= 0) { live[i] = live[i + 1] = live[i + 2] = live[i + 3] = 0; continue; }
+                for (let c = 0; c < 3; c++) live[i + c] = Math.round((fx[c] * fa + face[i + c] * ba * (1 - fa)) / oa);
+                live[i + 3] = Math.round(oa * 255);
+            }
+        }
+        d.st = st; d.at = now; this.sends++;
+        if (whole) this.cr.pixels(d.ref, null, buf(d.live));
+        else if (rects.length) this.cr.pixels(d.ref, rects, cropMany(d.live, rects));
     }
 
     lcd(key, ref, text, unit, now, s, center) {
         text = text == null ? '' : String(text);
-        if (text === this.lcdText[key] || now - this.lcdAt[key] < LCD_MIN_MS) return;
+        if (text === this.lcdText[key] || now - (this.lcdAt[key] || 0) < LCD_MIN_MS) return;
         this.lcdText[key] = text; this.lcdAt[key] = now;
         this.cr.pixels(ref, null, buf(F.lcd(text, unit, { illum: s.illum, center, style: s.style })));
     }
@@ -408,10 +348,33 @@ class ClassicCluster {
         });
         const shown = Object.keys(st.layers).filter((k) => st.layers[k] === 'shown').length;
         return { target: st.target, reason: st.reason, shown, budget: st.budget, backend: this.cr ? this.cr.backend : '',
-            groups, mode: this.mode, sends: this.sends || 0, sweeping: !!this.sweep,
+            groups, mode: this.mode, sends: this.sends || 0, sweeping: !!this.sweep, layers: this.layerCount || 0,
             refused: st.refused || 0, lastRefused: st.lastRefused || '' };
     }
 }
+
+/**
+ * Shift lights lit for an rpm: none below redline - 2000, then one more every 200 rpm,
+ * all ten at redline - 200, and 11 (all flashing) from the redline.
+ */
+function shiftLevel(rpm, redline) {
+    if (!(rpm > 0)) return 0;
+    if (rpm >= redline) return 11;
+    return Math.max(0, Math.min(10, Math.floor((rpm - (redline - 2000)) / 200) + 1));
+}
+
+/** The pixels of rectangle q of a canvas, row by row. */
+function crop(cv, q) { return cropMany(cv, [q]); }
+function cropMany(cv, rects) {
+    const out = Buffer.alloc(rects.reduce((t, q) => t + q.w * q.h * 4, 0));
+    let off = 0;
+    for (const q of rects) for (let y = q.y; y < q.y + q.h; y++) {
+        Buffer.from(cv.d.buffer, cv.d.byteOffset + (y * cv.w + q.x) * 4, q.w * 4).copy(out, off);
+        off += q.w * 4;
+    }
+    return out;
+}
+const round2 = (x) => Math.round(x * 100) / 100;
 
 /** The tach's full scale: the redline plus at least 500 rpm, rounded up to 1000. */
 function tachMax(redline) { return Math.max(6000, Math.ceil((redline + 500) / 1000) * 1000); }
@@ -430,4 +393,4 @@ const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
-module.exports = { ClassicCluster, layout, tachMax, warmLimit, TARGET, W, H };
+module.exports = { ClassicCluster, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };

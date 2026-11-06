@@ -45,7 +45,13 @@ const STYLES = {
         il: { mark: '#ffffff', num: '#ffffff', dim: '#8d939a', red: '#ff2a2a', lcd: '#ffffff', ghost: [255, 255, 255, 18] },
     },
 };
+STYLES.tech = {
+    needle: { core: '#ff2424', edge: '#ff2424', hi: '#ff9a9a', glow: [255, 50, 50, 40] },
+    rgb: { core: [255, 36, 36], edge: [255, 36, 36], hi: [255, 154, 154], glow: [255, 50, 50], fill: [30, 4, 4] },
+    il: { mark: '#ffffff', num: '#ffffff', dim: '#787e86', red: '#ff2828', lcd: '#ffffff', ghost: [255, 255, 255, 18] },
+};
 const style = (name) => STYLES[name] || STYLES.classic;
+const T = { RD: 300, ring: 284, ringW: 8, tickEnd: 272, num: 189, lights: 316, lightsW: 12 };
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const pol = (cx, cy, r, a) => [cx + Math.sin(a * RAD) * r, cy - Math.cos(a * RAD) * r];
@@ -86,7 +92,7 @@ function blank(cv) {
 }
 
 /** A sub-dial: ticks, end labels, a red zone from redFrom (fraction) and a small icon below. */
-function subDial(cv, il, labels, redFrom, redTo, icon) {
+function subDial(cv, il, labels, redFrom, redTo, icon, font) {
     const cx = C, cy = SUB.cy;
     for (let i = 0; i <= 8; i++) {
         const t = i / 8, a = subAngleOf(t);
@@ -96,7 +102,7 @@ function subDial(cv, il, labels, redFrom, redTo, icon) {
     }
     labels.forEach(([t, s]) => {
         const [x, y] = pol(cx, cy, SUB.r + 20, subAngleOf(t));
-        cv.text(s, x, y + 8, 22, il.num, { font: 'bold', align: 'center', literal: true });
+        cv.text(s, x, y + 8, font ? 18 : 22, il.num, { font: font || 'bold', align: 'center', literal: true });
     });
     if (icon) icon(cv, cx, cy + 22, il);
 }
@@ -125,6 +131,7 @@ function oilIcon(cv, x, y, il) {
  */
 function speedoFace(opts) {
     if (opts.style === 'sport') return speedoFaceSport(opts);
+    if (opts.style === 'tech') return techFace('speed', opts);
     const il = ILLUM[opts.illum] || ILLUM.orange;
     const cv = new Canvas(D, D);
     blank(cv);
@@ -153,7 +160,7 @@ function speedoFace(opts) {
     }
     cv.text(mph ? 'MPH' : 'km/h', C, C - 108, 32, il.num, { font: 'bold', align: 'center', literal: true });
     cv.text(mph ? 'km/h' : 'mph', C, C - 76, 18, il.dim, { font: 'label', align: 'center', literal: true });
-    lcdWell(cv);
+    if (opts.well !== false) lcdWell(cv);
     subDial(cv, il, [[0, '0'], [0.5, '1/2'], [1, '1/1']], 0, 0.125, pumpIcon);
     return cv;
 }
@@ -164,6 +171,7 @@ function speedoFace(opts) {
  */
 function tachFace(opts) {
     if (opts.style === 'sport') return tachFaceSport(opts);
+    if (opts.style === 'tech') return techFace('rpm', opts);
     const il = ILLUM[opts.illum] || ILLUM.orange;
     const cv = new Canvas(D, D);
     blank(cv);
@@ -197,168 +205,21 @@ function lcdWell(cv) {
 }
 
 /**
- * A needle pointing up: { cv, w, h, px, py } with (px, py) its pivot in the image.
- * len: pivot to tip; tail: pivot to the back end; width: at the pivot.
- */
-function needle(len, tail, width, glow, pal) {
-    const P = pal || NEEDLE;
-    const pad = glow ? 8 : 2;
-    const w = Math.ceil(width + 2 * pad) | 0, h = Math.ceil(len + tail + 2 * pad) | 0;
-    const cv = new Canvas(w + (w & 1), h + (h & 1));
-    const px = cv.w / 2, py = pad + len;
-    const tipW = Math.max(2.5, width * 0.28);
-    const body = (grow) => [
-        [px - tipW / 2 - grow, pad - grow * 0.5], [px + tipW / 2 + grow, pad - grow * 0.5],
-        [px + width / 2 + grow, py], [px + width * 0.7 + grow, py + tail + grow * 0.5],
-        [px - width * 0.7 - grow, py + tail + grow * 0.5], [px - width / 2 - grow, py],
-    ];
-    if (glow) for (let g = 6; g >= 2; g -= 2) convexPoly(cv, body(g), P.glow);
-    convexPoly(cv, body(0), P.edge);
-    convexPoly(cv, body(-1.2), P.core);
-    // a lighter spine along the front half
-    cv.convex([[px - 0.9, pad + 4], [px + 0.9, pad + 4], [px + 1.4, py - len * 0.15], [px - 1.4, py - len * 0.15]], P.hi);
-    return { cv, w: cv.w, h: cv.h, px, py };
-}
-
-/**
- * A needle drawn by a fragment shader on an unturned quad: the quad covers the needle's whole
- * sweep and the shader draws the needle at the angle in uniform u_a (degrees clockwise from up).
- * Nothing is turned, so this does not depend on the renderer turning layers.
- * spec: { w, h (the quad), px, py (the pivot in it), len, tail, wid, col (optional: { core, edge, hi, glow } RGB) }
- */
-const NEEDLE_RGB = { core: [255, 90, 28], edge: [208, 48, 10], hi: [255, 178, 122], glow: [255, 80, 20] };
-const glsl3 = (c) => 'vec3(' + c.map((v) => (v / 255).toFixed(4)).join(', ') + ')';
-const f1 = (v) => (Number.isInteger(v) ? v + '.0' : String(v));
-function needleShader(sp) {
-    const K = sp.col || NEEDLE_RGB;
-    return `#version 100
-// cc-needle ${JSON.stringify(sp)}
-precision mediump float;
-uniform float u_a;
-varying vec2 v_uv;
-void main() {
-    vec2 p = v_uv * vec2(${f1(sp.w)}, ${f1(sp.h)}) - vec2(${f1(sp.px)}, ${f1(sp.py)});
-    float a = radians(u_a);
-    float c = cos(a), s = sin(a);
-    vec2 q = vec2(c * p.x + s * p.y, c * p.y - s * p.x);
-    float y = q.y;
-    float hw = y <= 0.0 ? mix(${f1(sp.wid * 0.14)}, ${f1(sp.wid * 0.5)}, clamp((y + ${f1(sp.len)}) / ${f1(sp.len)}, 0.0, 1.0))
-                        : mix(${f1(sp.wid * 0.5)}, ${f1(sp.wid * 0.7)}, clamp(y / ${f1(sp.tail)}, 0.0, 1.0));
-    float d = max(abs(q.x) - hw, max(-${f1(sp.len)} - y, y - ${f1(sp.tail)}));
-    float body = clamp(0.5 - d, 0.0, 1.0);
-    float core = clamp(-0.7 - d, 0.0, 1.0);
-    float glow = (1.0 - smoothstep(0.0, 7.0, d)) * 0.16;
-    vec3 col = mix(${glsl3(K.edge)}, ${glsl3(K.core)}, core);
-    float spine = (1.0 - smoothstep(0.6, 1.6, abs(q.x))) * step(-${f1(sp.len - 4)}, y) * step(y, -${f1(Math.round(sp.len * 0.15))});
-    col = mix(col, ${glsl3(K.hi)}, spine * core);
-    float al = max(body, glow);
-    gl_FragColor = vec4(body > 0.0 ? col : ${glsl3(K.glow)}, al);
-}`;
-}
-/** The shader's twin in JavaScript, for desk previews: straight RGBA at pixel (x, y) of the quad. */
-function needleShade(sp, x, y, ang) {
-    const K = sp.col || NEEDLE_RGB;
-    const sm = (e0, e1, v) => { const t = Math.max(0, Math.min(1, (v - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
-    const px = x - sp.px, py = y - sp.py, a = ang * RAD, c = Math.cos(a), s = Math.sin(a);
-    const qx = c * px + s * py, qy = c * py - s * px;
-    const hw = qy <= 0 ? lerp(sp.wid * 0.14, sp.wid * 0.5, Math.max(0, Math.min(1, (qy + sp.len) / sp.len)))
-        : lerp(sp.wid * 0.5, sp.wid * 0.7, Math.max(0, Math.min(1, qy / sp.tail)));
-    const d = Math.max(Math.abs(qx) - hw, Math.max(-sp.len - qy, qy - sp.tail));
-    const body = Math.max(0, Math.min(1, 0.5 - d)), core = Math.max(0, Math.min(1, -0.7 - d));
-    const glow = (1 - sm(0, 7, d)) * 0.16;
-    let col = K.edge.map((v, i) => lerp(v, K.core[i], core));
-    const spine = (1 - sm(0.6, 1.6, Math.abs(qx))) * (qy >= -(sp.len - 4) ? 1 : 0) * (qy <= -Math.round(sp.len * 0.15) ? 1 : 0);
-    col = col.map((v, i) => lerp(v, K.hi[i], spine * core));
-    const al = Math.max(body, glow);
-    return [...(body > 0 ? col : K.glow), al * 255];
-}
-
-/**
- * A needle drawn straight into a canvas at angle ang (degrees clockwise), pivot (px, py): for
- * needles redrawn as unturned images. Returns the rectangles (x, y, w, h, unclipped) that
- * together cover everything it drew: `n` pieces along its length.
- */
-function drawNeedleAt(cv, px, py, ang, len, tail, wid, n, pal) {
-    const P = pal || NEEDLE;
-    const a = ang * RAD, c = Math.cos(a), s = Math.sin(a);
-    const T = (x, y) => [px + x * c - y * s, py + x * s + y * c];
-    const tipW = Math.max(2.5, wid * 0.28);
-    const body = (g) => [[-tipW / 2 - g, -len - g * 0.5], [tipW / 2 + g, -len - g * 0.5], [wid / 2 + g, 0],
-        [wid * 0.7 + g, tail + g * 0.5], [-wid * 0.7 - g, tail + g * 0.5], [-wid / 2 - g, 0]].map((q) => T(q[0], q[1]));
-    convexPoly(cv, body(0), P.edge);
-    convexPoly(cv, body(-1.2), P.core);
-    return needleRects(px, py, ang, len, tail, wid, n);
-}
-/** The rectangles covering a needle at ang (see drawNeedleAt). */
-function needleRects(px, py, ang, len, tail, wid, n) {
-    const a = ang * RAD, c = Math.cos(a), s = Math.sin(a);
-    const m = wid * 0.7 + 3, out = [];
-    for (let i = 0; i < n; i++) {
-        const y0 = -len - 4 + (len + tail + 8) * i / n, y1 = -len - 4 + (len + tail + 8) * (i + 1) / n;
-        const xa = px - y0 * s, ya = py + y0 * c, xb = px - y1 * s, yb = py + y1 * c;
-        const x = Math.floor(Math.min(xa, xb) - m), y = Math.floor(Math.min(ya, yb) - m);
-        out.push({ x, y, w: Math.ceil(Math.max(xa, xb) + m) - x, h: Math.ceil(Math.max(ya, yb) + m) - y });
-    }
-    return out;
-}
-
-/** convex() takes convex polygons: the needle outline is split into two convex halves. */
-function convexPoly(cv, p, c) {
-    cv.convex([p[0], p[1], p[2], p[5]], c);
-    cv.convex([p[5], p[2], p[3], p[4]], c);
-}
-
-/** A round hub cap of radius r: { cv, w, h }. */
-function hub(r, styleName) {
-    const s = Math.ceil(2 * r + 4) | 0;
-    const cv = new Canvas(s + (s & 1), s + (s & 1));
-    const c = cv.w / 2;
-    if (styleName === 'sport') {
-        cv.arc(c, c, 0, r, 0, 360, '#0b0c0e');
-        cv.arc(c, c, r - 2.5, r, 0, 360, '#2e3237');
-        cv.arc(c, c, 0, r * 0.32, 0, 360, style('sport').needle.core);
-        cv.arc(c, c, 0, r * 0.14, 0, 360, '#0b0c0e');
-        return { cv, w: cv.w, h: cv.h };
-    }
-    cv.arc(c, c, 0, r, 0, 360, '#1a1a1b');
-    for (let i = 0; i < 8; i++) cv.arc(c, c, 0, r * (1 - i / 9), 0, 360, [40 + i * 3, 40 + i * 3, 42 + i * 3, 30]);
-    cv.arc(c, c, r - 2, r, 0, 360, '#3c3c3e');
-    cv.arc(c, c, 0, r * 0.18, 0, 360, '#0c0c0c');
-    return { cv, w: cv.w, h: cv.h };
-}
-
-/**
- * One warm-up segment, a pill already turned to angle a (degrees clockwise), in a small square
- * image: its layer is placed, never turned.
- */
-function segment(a) {
-    const n = SEG.box, cv = new Canvas(n, n), c = n / 2;
-    const ux = Math.sin(a * RAD), uy = -Math.cos(a * RAD);       // along the radius
-    const vx = Math.cos(a * RAD), vy = Math.sin(a * RAD);        // across it
-    const hl = (SEG.h - 4) / 2, hw = (SEG.w - 4) / 2;
-    const quad = (l, w) => [[c - ux * l - vx * w, c - uy * l - vy * w], [c + ux * l - vx * w, c + uy * l - vy * w],
-        [c + ux * l + vx * w, c + uy * l + vy * w], [c - ux * l + vx * w, c - uy * l + vy * w]];
-    cv.convex(quad(hl, hw), '#ffa020');
-    cv.convex(quad(hl * 0.45, hw * 0.5).map(([x, y]) => [x + ux * hl * 0.35, y + uy * hl * 0.35]), [255, 225, 160, 110]);
-    return cv;
-}
-const SEG = { r: 247, w: 12, h: 18, box: 24 };
-
-/**
  * An LCD's content: text right-aligned in the window, with ghost segments behind and an
  * optional small unit. Returns a Canvas of LCD.w x LCD.h.
  */
 function lcd(text, unit, opts) {
     const centre = opts && opts.center;
-    const sport = opts && opts.style === 'sport';
-    const il = sport ? STYLES.sport.il : ILLUM[(opts && opts.illum) || 'orange'] || ILLUM.orange;
+    const tech = opts && opts.style === 'tech';
+    const sport = (opts && opts.style === 'sport') || tech;
+    const il = tech ? STYLES.tech.il : sport ? STYLES.sport.il : ILLUM[(opts && opts.illum) || 'orange'] || ILLUM.orange;
     const cv = new Canvas(LCD.w, LCD.h);
     if (sport) {
         // no window: large white figures straight on the face
-        cv.clear('#050506');
+        cv.clear(tech ? '#060608' : '#050506');
         const right = centre ? LCD.w / 2 : unit ? LCD.w - 62 : LCD.w - 14;
-        cv.text(text, right, 48, 52, il.lcd, { font: sport ? 'bold' : 'num', align: centre ? 'center' : 'right', literal: true });
-        if (unit) cv.text(unit, LCD.w - 10, 46, 20, il.dim, { font: 'bold', align: 'right', literal: true });
+        cv.text(text, right, tech ? 46 : 48, tech ? 40 : 52, il.lcd, { font: tech ? 'orb' : 'bold', align: centre ? 'center' : 'right', literal: true });
+        if (unit) cv.text(unit, LCD.w - 10, 46, 20, il.dim, { font: tech ? 'orbm' : 'bold', align: 'right', literal: true });
         return cv;
     }
     cv.clear('#0d0b08');
@@ -377,27 +238,34 @@ function lcd(text, unit, opts) {
 const CENTER = { w: 360, h: 240 };
 /** opts: { illum, style, mode (the drive mode as text, or '') } */
 function centerInfo(range, odo, opts) {
-    const sport = opts && opts.style === 'sport';
-    const il = sport ? STYLES.sport.il : ILLUM[(opts && opts.illum) || 'orange'] || ILLUM.orange;
+    const o = opts || {};
+    const tech = o.style === 'tech', sport = o.style === 'sport' || tech;
+    const il = tech ? STYLES.tech.il : sport ? STYLES.sport.il : ILLUM[o.illum || 'orange'] || ILLUM.orange;
+    const F1 = tech ? 'orb' : 'bold', F2 = tech ? 'orbm' : 'bold';
     const rule = sport ? [255, 255, 255, 40] : [255, 145, 36, 60];
     const cv = new Canvas(CENTER.w, CENTER.h);
-    if (sport) cv.clear('#050506');
+    if (sport) cv.clear(tech ? '#060608' : '#050506');
     else {
         cv.roundRect(0, 0, CENTER.w, CENTER.h, 12, '#2a2a2c');
         cv.roundRect(3, 3, CENTER.w - 6, CENTER.h - 6, 10, '#0d0b08');
     }
-    const mode = (opts && opts.mode) || '';
-    cv.text(mode ? mode.toUpperCase() : 'DRIVE MODE ---', CENTER.w / 2, 42, 28, mode ? il.lcd : il.dim,
-        { font: 'bold', align: 'center', literal: true, spacing: 3 });
+    const mode = o.mode || '';
+    cv.text(mode ? mode.toUpperCase() : 'DRIVE MODE ---', CENTER.w / 2, 42, tech ? 24 : 28, mode ? il.lcd : il.dim,
+        { font: F1, align: 'center', literal: true, spacing: 3 });
     cv.fillRect(24, 58, CENTER.w - 48, 2, rule);
-    // the middle (y 62-150) is left empty: the live speed is its own small layer (centerSpeed)
+    // the speed: CSPEED is the rectangle a speed change redraws
+    const sp = o.speed == null ? '' : String(o.speed);
+    cv.text(sp, CENTER.w / 2 + 14, 134, tech ? 72 : 64, il.lcd, { font: tech ? 'orb' : sport ? 'bold' : 'num', align: 'right', literal: true });
+    cv.text(o.unit || '', CENTER.w / 2 + 26, 132, tech ? 18 : 24, il.dim, { font: F2, literal: true });
     cv.fillRect(24, 154, CENTER.w - 48, 2, rule);
-    cv.text('RANGE', 30, 192, 22, il.dim, { font: 'bold', literal: true });
-    cv.text(range, CENTER.w - 30, 192, 32, il.lcd, { font: 'bold', align: 'right', literal: true });
-    cv.text('ODO', 30, 226, 22, il.dim, { font: 'bold', literal: true });
-    cv.text(odo, CENTER.w - 30, 226, 32, il.lcd, { font: 'bold', align: 'right', literal: true });
+    cv.text('RANGE', 30, 192, tech ? 18 : 22, il.dim, { font: F2, literal: true });
+    cv.text(range, CENTER.w - 30, 192, tech ? 24 : 32, il.lcd, { font: F1, align: 'right', literal: true });
+    cv.text('ODO', 30, 226, tech ? 18 : 22, il.dim, { font: F2, literal: true });
+    cv.text(odo, CENTER.w - 30, 226, tech ? 24 : 32, il.lcd, { font: F1, align: 'right', literal: true });
     return cv;
 }
+/** The part of the centre panel a speed change redraws. */
+const CSPEED = { x: 20, y: 62, w: CENTER.w - 40, h: 90 };
 
 /* ---------- the sport style's faces: an original modern design ---------- */
 
@@ -453,20 +321,82 @@ function tachFaceSport(opts) {
     return cv;
 }
 
-/** The live speed in the middle of the centre panel: CSPEED.w x CSPEED.h, at CSPEED.y in the panel. */
-const CSPEED = { w: 300, h: 88, y: 62 };
-function centerSpeed(text, unit, opts) {
-    const sport = opts && opts.style === 'sport';
-    const il = sport ? STYLES.sport.il : ILLUM[(opts && opts.illum) || 'orange'] || ILLUM.orange;
-    const cv = new Canvas(CSPEED.w, CSPEED.h).clear(sport ? '#050506' : '#0d0b08');
-    cv.text(text, CSPEED.w / 2 + 10, 70, 64, il.lcd, { font: sport ? 'bold' : 'num', align: 'right', literal: true });
-    cv.text(unit, CSPEED.w / 2 + 22, 68, 24, il.dim, { font: 'bold', literal: true });
+/* ---------- the tech style: Orbitron numerals, a lit ring, shift lights ---------- */
+
+/** opts: { units, redline, max, tempUnit } */
+function techFace(kind, opts) {
+    const il = STYLES.tech.il, cv = new Canvas(D, D);
+    const speed = kind === 'speed';
+    const mph = opts.units !== 'kmh';
+    const max = speed ? (mph ? 160 : 260) : (opts.max || 8000);
+    const red = speed ? null : (opts.redline || 7000);
+    cv.clear([0, 0, 0, 0]);
+    cv.arc(C, C, 0, T.RD, 0, 360, '#060608');
+    cv.arc(C, C, T.RD - 3, T.RD, 0, 360, '#282c32');
+    // the ring's dark track (lit by the fx layer), red from the redline
+    cv.arc(C, C, T.ring - T.ringW / 2, T.ring + T.ringW / 2, A0, A1, '#181a1e');
+    if (red) cv.arc(C, C, T.ring - T.ringW / 2, T.ring + T.ringW / 2, angleOf(red, 0, max), A1, '#5a1010');
+    // shift lights, unlit: 10 segments over the 2000 rpm below the redline
+    if (red) {
+        const l0 = angleOf(red - 2000, 0, max), l1 = angleOf(red, 0, max), st = (l1 - l0) / 10;
+        for (let i = 0; i < 10; i++) cv.arc(C, C, T.lights - T.lightsW / 2, T.lights + T.lightsW / 2, l0 + i * st + 0.8, l0 + (i + 1) * st - 0.8, '#1c1e22');
+    }
+    // ticks
+    const minor = speed ? (mph ? 5 : 10) : 250, major = speed ? 20 : 1000;
+    for (let v = 0; v <= max + 1e-6; v += minor) {
+        const a = angleOf(v, 0, max), isM = Math.abs(v % major) < 1e-6 || Math.abs(v % major - major) < 1e-6;
+        const c = red !== null && v >= red ? il.red : isM ? il.mark : il.dim;
+        tick(cv, C, C, a, T.tickEnd - (isM ? 33 : 15), T.tickEnd, isM ? 6 : 3, c);
+    }
+    // numerals
+    for (let v = 0; v <= max + 1e-6; v += major) {
+        const [x, y] = pol(C, C, T.num, angleOf(v, 0, max));
+        const size = speed ? 44 : 66;
+        cv.text(String(speed ? v : v / 1000), x, y + size * 0.36, size, red !== null && v >= red ? il.red : il.num, { font: 'orb', align: 'center', literal: true });
+    }
+    cv.text(speed ? (mph ? 'mph' : 'km/h') : 'rpm x1000', C, C - 104, 22, il.dim, { font: 'orbm', align: 'center', literal: true });
+    if (speed) subDial(cv, il, [[0, 'E'], [0.5, '1/2'], [1, 'F']], 0, 0.125, pumpIcon, 'orbm');
+    else {
+        const f = opts.tempUnit === 'f';
+        subDial(cv, il, f ? [[0, '120'], [0.5, '210'], [1, '300']] : [[0, '50'], [0.5, '100'], [1, '150']], f ? (280 - 120) / 180 : 0.9, 1, oilIcon, 'orbm');
+    }
     return cv;
 }
 
+/**
+ * The moving parts of a dial, for fx.js: needles, hubs, and for the tech style the lit ring and
+ * the shift lights. In face pixels.
+ */
+function dialFx(styleName, kind, opts) {
+    const st = style(styleName), rgb = st.rgb;
+    const tech = styleName === 'tech';
+    const speed = kind === 'speed';
+    const max = speed ? (opts.units === 'kmh' ? 260 : 160) : (opts.max || 8000);
+    const red = speed ? null : (opts.redline || 7000);
+    const spec = { id: styleName + '-' + kind, w: D, h: D, cx: C, cy: C };
+    spec.main = tech
+        ? { shape: 'hollow', len: 258, tail: 36, wid: 27, ow: 3.5, glowR: 6, glowA: 0.55, fillA: 0.9, col: { edge: rgb.edge, fill: rgb.fill, glow: rgb.glow, core: rgb.core, hi: rgb.hi } }
+        : { shape: 'taper', len: 270, tail: 62, wid: 15, col: rgb };
+    spec.sub = { cx: C, cy: SUB.cy, len: 66, tail: 16, wid: 8 };
+    const hubs = {
+        classic: { r: 36, fill: [26, 26, 27], ring: [60, 60, 62], rw: 2, r1: 6.5, c1: [12, 12, 12] },
+        sport: { r: 36, fill: [11, 12, 14], ring: [46, 50, 55], rw: 2.5, r1: 11.5, c1: rgb.core, r2: 5, c2: [11, 12, 14] },
+        tech: { r: 36, fill: [12, 12, 14], ring: [60, 64, 70], rw: 3, r1: 9, c1: rgb.core },
+    };
+    spec.hub = hubs[styleName] || hubs.classic;
+    spec.subHub = { r: 11, fill: spec.hub.fill, ring: spec.hub.ring, rw: 1.5, r1: 3, c1: tech || styleName === 'sport' ? rgb.core : [12, 12, 12] };
+    if (tech) {
+        spec.ring = { r: T.ring, w: T.ringW, a0: A0, a1: A1, aRed: red ? angleOf(red, 0, max) : A1 + 1, lit: [255, 255, 255], red: [255, 40, 40] };
+        if (red) spec.lights = { r: T.lights, w: T.lightsW, n: 10, a0: angleOf(red - 2000, 0, max), a1: angleOf(red, 0, max), gap: 0.8,
+            green: 4, yellow: 7, cGreen: [40, 220, 90], cYellow: [255, 200, 30], cRed: [255, 40, 40], cDim: [60, 16, 16] };
+    }
+    spec.max = max; spec.redline = red;
+    return spec;
+}
+
 module.exports = {
-    CSPEED, centerSpeed,
-    STYLES, style, CENTER, centerInfo, drawNeedleAt, needleRects, needleShader, needleShade, NEEDLE_RGB,
-    Canvas, D, C, R_FACE, R_TICK, A0, A1, SUB, LCD, SEG, ILLUM, NEEDLE,
-    angleOf, subAngleOf, pol, speedoFace, tachFace, needle, hub, segment, lcd,
+    CSPEED, techFace, dialFx,
+    STYLES, style, CENTER, centerInfo,
+    Canvas, D, C, R_FACE, R_TICK, A0, A1, SUB, LCD, ILLUM, NEEDLE, T,
+    angleOf, subAngleOf, pol, speedoFace, tachFace, lcd,
 };
