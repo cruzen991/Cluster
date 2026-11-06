@@ -15,7 +15,8 @@ Two gauge styles (Settings → *Gauge style*):
   *Shift lights*, on).
 - **Arc**: one tachometer in the middle with the gear and speed inside it, a red arc that fills
   with the revs, a "red glass" needle (pale outline, see-through red middle, red glow) and the shift lights; numerals that grow as the needle comes up to them; big
-  readouts left (oil, coolant, fuel bar, range) and right (boost, torque, odometer); and a strip along the bottom
+  readouts left (oil, coolant, fuel bar, range) and right (boost with the drive's peak beside its label, torque,
+  odometer; the peak ignores anything over 35 psi as a bad sample and resets after the engine has been off a minute); and a strip along the bottom
   with the outside temperature, the drive mode and the intake air temperature, over a red perspective grid that
   fades into a horizon below the middle ([picture](docs/arc.png)), or (setting *Background*) graphite: dark grey falling
   to black with a soft red pool of light under the dial ([picture](docs/arc-graphite.png)). The stock cluster is always

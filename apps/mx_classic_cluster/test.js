@@ -176,6 +176,8 @@ for (const st of ['tech']) {
     const t = arcTexts(s, v, false);
     assert.deepStrictEqual([t.left.oil, t.left.cool, t.right.boost, t.right.torque, t.right.tq, t.strip.intake, t.strip.outside, t.strip.mode, t.right.odo],
         ['194', '190', '12', '295', 'LB-FT', '86°F', '64°F', 'SPORT PLUS', '41,820 MI']);
+    assert.strictEqual(arcTexts(s, Object.assign({}, v, { peakPsi: 18.6 }), false).right.peak, 'PEAK 19');
+    assert.strictEqual(arcTexts(s, Object.assign({}, v, { peakPsi: 0.4 }), false).right.peak, '', 'no peak shown under 1 psi');
     const tn = arcTexts({ tempUnit: 'c', torqueUnit: 'nm', units: 'kmh' }, { boostPsi: null, torqueNm: NaN, iatC: null }, false);
     assert.deepStrictEqual([tn.right.boost, tn.right.torque, tn.right.tq, tn.strip.intake, tn.left.oil, tn.centre.unit], ['--', '--', 'NM', '--', '--', 'KM/H']);
     const p = new A.Panel(L.right.w, L.right.h);

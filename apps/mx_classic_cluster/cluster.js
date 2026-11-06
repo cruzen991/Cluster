@@ -41,7 +41,9 @@ const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
 const MAX_LAYERS = 8;              // cluster-render's per-client limit
 /* arc style: how often each slow value shown is refreshed (ms); a value that was missing shows at once */
 const SLOW_MS = { oilC: 3000, coolC: 3000, iatC: 2000, outsideC: 120000 };
-const PANEL_MS = 250;              // arc style: readouts redrawn at most 4 times a second (big figures cost upload)
+const PANEL_MS = 250;
+const PEAK_MAX_PSI = 35;           // arc style: a boost above this is a bad sample, never a peak
+const PEAK_RESET_MS = 60000;       // and the peak is forgotten after the engine has been off this long              // arc style: readouts redrawn at most 4 times a second (big figures cost upload)
 
 /* where the two dials sit on the panel; dx moves both outwards (+) or inwards (-) */
 function layout(dx, dy) {
@@ -470,7 +472,13 @@ class ClassicCluster {
             const missing = sl.v[k] == null && v[k] != null;
             if (!(k in sl.v) || missing || now - sl.at[k] >= SLOW_MS[k]) { sl.v[k] = v[k]; sl.at[k] = now; }
         }
-        const t = arcTexts(s, Object.assign({}, v, sl.v), this.sweep);
+        // the drive's peak boost: the highest seen (not in the sweep, nothing above PEAK_MAX_PSI, which
+        // would be a bad sample), forgotten once the engine has been off PEAK_RESET_MS (a new drive)
+        const b = v.boostPsi;
+        if (!this.sweep && v.live !== false && b != null && isFinite(b) && b <= PEAK_MAX_PSI) this.peak = Math.max(this.peak || 0, b);
+        if (v.rpm > 300) this.engineAt = now;
+        else if (this.peak && now - (this.engineAt || now) > PEAK_RESET_MS) this.peak = 0;
+        const t = arcTexts(s, Object.assign({}, v, sl.v, { peakPsi: this.peak }), this.sweep);
         A.drawCentre(this.panels.centre.p, t.centre);
         A.drawLeft(this.panels.left.p, t.left);
         A.drawRight(this.panels.right.p, t.right);
@@ -552,7 +560,7 @@ function arcTexts(s, v, sweep) {
     return {
         centre: { gear: sweep ? '88' : (v.gearText || '-'), speed: sweep ? '888' : (v.speedText == null ? '---' : String(v.speedText)), unit: s.units === 'kmh' ? 'KM/H' : 'MPH' },
         left: { oil: T(v.oilC), cool: T(v.coolC), tu, oilWarn: v.oilC >= 130, coolWarn: v.coolC >= 112, fuel: v.fuel, range: up(v.rangeText || '---') },
-        right: { boost, torque: tq, tq: lb ? 'LB-FT' : 'NM', odo: up(v.odoText || '---') },
+        right: { boost, torque: tq, tq: lb ? 'LB-FT' : 'NM', odo: up(v.odoText || '---'), peak: v.peakPsi >= 1 ? 'PEAK ' + Math.round(v.peakPsi) : '' },
         strip: { outside: T(v.outsideC) === '--' ? '--' : T(v.outsideC) + tu, mode: up(v.modeText) || 'DRIVE', intake: T(v.iatC) === '--' ? '--' : T(v.iatC) + tu },
     };
 }

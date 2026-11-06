@@ -39,6 +39,7 @@ const NUM_BOX = 86;                       // each numeral's box (fits the larges
 const NUM_REACH = 0.85;                   // the growth starts this many thousand rpm away
 
 const NEEDLE_RED = [255, 38, 38];        // the needle and the lit rpm arc
+const ORANGE_DIM = [200, 96, 22];          // the peak boost: present, never louder than the labels
 const ORANGE = [255, 122, 26], WHITE = '#f5f6f8', DIM = '#7a8088', FAINT = '#34383e', RED = '#ee3c32';
 
 /* where the layers sit on the 1920 x 720 panel */
@@ -333,11 +334,13 @@ function drawLeft(p, v) {
     p.cell('range', ROW.foot, v.range, (cv) => cv.text(v.range, X, ROW.fb, 26, WHITE, { font: 'orb', align: 'center', literal: true }));
 }
 
-/** Boost / torque / odometer. v: { boost, torque (strings), tq ('LB-FT'), odo } */
+/** Boost / torque / odometer. v: { boost, torque (strings), tq ('LB-FT'), odo, peak ('PEAK 19' or '') } */
 function drawRight(p, v) {
     const X = 270;
     p.cell('lbl', { x: 0, y: 0, w: 540, h: 60 }, 'x', (cv) => LBL(cv, X, ROW.l1, 'BOOST'));
     tabular(p, 'boost', ROW.v1, X, ROW.b1, v.boost, 96, WHITE, 'PSI');
+    // the drive's peak boost, small and dim on the label's line, right of it; nothing until there is one
+    p.cell('peak', { x: 360, y: 26, w: 170, h: 28 }, v.peak || '', (cv) => { if (v.peak) cv.text(v.peak, 372, 46, 16, ORANGE_DIM, { font: 'orbm', literal: true, spacing: 3 }); });
     p.cell('lbl2', { x: 0, y: 196, w: 540, h: 40 }, 'x', (cv) => LBL(cv, X, ROW.l2, 'TORQUE'));
     tabular(p, 'torque', ROW.v2, X, ROW.b2, v.torque, 96, WHITE, v.tq);
     p.cell('odoL', { x: 0, y: 396, w: 540, h: 36 }, 'x', (cv) => LBL(cv, X, 420, 'ODOMETER'));
