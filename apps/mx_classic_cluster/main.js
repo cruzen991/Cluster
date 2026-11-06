@@ -51,7 +51,7 @@ mgu.run({
             torqueUnit: settings.get('torqueUnit') === 'nm' ? 'nm' : 'lbft',
             arcBg: settings.get('arcBg') === 'graphite' ? 'graphite' : 'grid',
             shift: settings.get('shift') !== false,
-            needles: settings.get('needles') === 'shader' ? 'shader' : 'redraw',
+            needles: ['shader', 'rotate'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'redraw',
         });
 
         // fuel: litres in the tank from the cluster's own range / tank status

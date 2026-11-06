@@ -101,6 +101,7 @@ function shader(spec) {
         out.push('    if (d < 8.0) { over(' + v3(m.col.glow) + ', (1.0 - smoothstep(0.0, 6.0, d)) * 0.16); over(' + v3(m.col.edge) + ', 0.5 - d); over(' + v3(m.col.core) + ', -0.7 - d); } }');
         if (SH) out.push('  hub(p - vec2(' + f(s.cx) + ', ' + f(s.cy) + '), ' + hubArgs(Object.assign({}, SH, { r: s.hr || SH.r })) + ');');
     });
+    if (!m) { /* no main needle */ } else {
     out.push('  { vec2 q = rot(pc, u_v.x);');
     if (m.shape === 'hollow') {
         const k = kite(m), e1 = edge(k.T, k.R1), e2 = edge(k.R1, k.R2);
@@ -119,6 +120,7 @@ function shader(spec) {
         out.push('      float spine = (1.0 - smoothstep(0.6, 1.6, abs(q.x))) * step(-' + f(m.len - 4) + ', q.y) * step(q.y, -' + f(Math.round(m.len * 0.15)) + ');');
         out.push('      over(mix(' + v3(m.col.core) + ', ' + v3(m.col.hi) + ', spine), -0.7 - d);');
         out.push('    } }');
+    }
     }
     if (H) out.push('  hub(pc, ' + hubArgs(H) + ');');
     out.push('  gl_FragColor = acc.a > 0.0 ? vec4(acc.rgb / acc.a, acc.a) : vec4(0.0);');
@@ -178,7 +180,7 @@ function shade(spec, x, y, st) {
         if (d < 8) { over(m.col.glow, (1 - sm(0, 6, d)) * 0.16); over(m.col.edge, 0.5 - d); over(m.col.core, -0.7 - d); }
         if (spec.subHub) hub(x - s.cx, y - s.cy, Object.assign({}, spec.subHub, { r: s.hr || spec.subHub.r }));
     }
-    {
+    if (m) {
         const [qx, qy] = rot(pcx, pcy, st.a);
         if (m.shape === 'hollow') {
             const k = kite(m), e1 = edge(k.T, k.R1), e2 = edge(k.R1, k.R2), hx = Math.abs(qx);
@@ -233,11 +235,11 @@ function compose(spec, st, face, live, rects) {
     const m = spec.main, R = spec.ring, L = spec.lights, H = spec.hub, SH = spec.subHub;
     const W = spec.w, cx = spec.cx, cy = spec.cy;
     const ra = st.a * RAD, ca = Math.cos(ra), sa = Math.sin(ra);
-    const reachM = (m.len + 20) * (m.len + 20);
-    const hollow = m.shape === 'hollow';
+    const reachM = m ? (m.len + 20) * (m.len + 20) : -1;
+    const hollow = m && m.shape === 'hollow';
     let e1, e2;
     if (hollow) { const k = kite(m); e1 = edge(k.T, k.R1); e2 = edge(k.R1, k.R2); }
-    const coreHi = m.col.core;
+    const coreHi = m ? m.col.core : null;
     const subs = (spec.subs || []).map((s) => {
         const ang = (s.u === 'w' ? st.c : st.b) * RAD;
         const reach = Math.max(s.len, s.tail) + 10;
@@ -322,7 +324,7 @@ const SPINE = [0, 0, 0];
 
 /** Every rectangle the moving parts can cover at state st (for the first picture). */
 function allRects(spec, st) {
-    let r = needleRects(spec, st.a, 8);
+    let r = spec.main ? needleRects(spec, st.a, 8) : [];
     for (const s of spec.subs || []) r = r.concat(subRects(s, s.u === 'w' ? st.c : st.b));
     if (spec.ring && st.a > spec.ring.a0) r = r.concat(sectorRects(spec.cx, spec.cy, spec.ring.r, spec.ring.w, spec.ring.a0, Math.min(st.a, spec.ring.a1)));
     if (spec.lights && st.lv > 0) r = r.concat(sectorRects(spec.cx, spec.cy, spec.lights.r, spec.lights.w, spec.lights.a0, spec.lights.a1));
@@ -366,7 +368,7 @@ function dirty(spec, o, n) {
     let r = [];
     if (!o) return [{ x: 0, y: 0, w: spec.w, h: spec.h }];
     if (o.a !== n.a) {
-        r = r.concat(pairUp(needleRects(spec, o.a, 8), needleRects(spec, n.a, 8)));
+        if (spec.main) r = r.concat(pairUp(needleRects(spec, o.a, 8), needleRects(spec, n.a, 8)));
         if (spec.ring) r = r.concat(sectorRects(spec.cx, spec.cy, spec.ring.r, spec.ring.w, Math.max(spec.ring.a0, Math.min(o.a, spec.ring.a1)), Math.max(spec.ring.a0, Math.min(n.a, spec.ring.a1))));
     }
     for (const s of spec.subs || []) {

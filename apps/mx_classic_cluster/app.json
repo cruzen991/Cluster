@@ -281,6 +281,10 @@
           "Redrawn images (default, works on the car)"
         ],
         [
+          "rotate",
+          "Rotating layer (lightest, smoothest; Arc style; not yet seen on a car)"
+        ],
+        [
           "shader",
           "Shader (smoother, not yet seen on a car)"
         ]

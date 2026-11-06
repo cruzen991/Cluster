@@ -107,7 +107,13 @@ function numerals(opts) {
             cv.text(String(n), NUM_BOX / 2, NUM_BOX / 2 + size * 0.36, size, n * 1000 >= red ? RED : WHITE, { font: 'orb', align: 'center', literal: true });
             sprites.push(cv);
         }
-        out.push({ n, box, sprites });
+        // each size's ink, in box pixels: a size change sends only the union of the old and new ink
+        const ink = sprites.map((cv) => {
+            let x0 = cv.w, y0 = cv.h, x1 = -1, y1 = -1;
+            for (let y = 0; y < cv.h; y++) for (let x = 0; x < cv.w; x++) if (cv.d[(y * cv.w + x) * 4 + 3]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+            return x1 < 0 ? { x: 0, y: 0, w: 0, h: 0 } : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+        });
+        out.push({ n, box, sprites, ink });
     }
     return out;
 }
@@ -123,8 +129,11 @@ function numeralLevels(rpm, count) {
     return out;
 }
 
-/** Paste numeral `num` at size `k` into `face` (its box restored from `base` first). */
-function pasteNumeral(face, base, num, k) {
+/**
+ * Paste numeral `num` at size `k` into `face` (its box restored from `base` first). Returns the
+ * rectangle (dial pixels) that changed coming from size `from`: the union of the two sizes' ink.
+ */
+function pasteNumeral(face, base, num, k, from) {
     const q = num.box;
     for (let y = q.y; y < q.y + q.h; y++) {
         if (y < 0 || y >= face.h) continue;
@@ -132,6 +141,12 @@ function pasteNumeral(face, base, num, k) {
         face.d.set(base.d.subarray(i, i + (x1 - x0) * 4), i);
     }
     face.blit(num.sprites[k], q.x, q.y);
+    if (from == null) return q;
+    const a = num.ink[k], b = num.ink[from];
+    if (!a.w) return b.w ? { x: q.x + b.x, y: q.y + b.y, w: b.w, h: b.h } : { x: q.x, y: q.y, w: 1, h: 1 };
+    if (!b.w) return { x: q.x + a.x, y: q.y + a.y, w: a.w, h: a.h };
+    const x0 = Math.min(a.x, b.x), y0 = Math.min(a.y, b.y);
+    return { x: q.x + x0, y: q.y + y0, w: Math.max(a.x + a.w, b.x + b.w) - x0, h: Math.max(a.y + a.h, b.y + b.h) - y0 };
 }
 
 /** The face with every numeral at its size. */
@@ -217,6 +232,21 @@ function graphiteBackground() {
 /** The arc style's background by its setting: 'grid' (default) or 'graphite'. */
 function background(kind) { return kind === 'graphite' ? graphiteBackground() : gridBackground(); }
 
+/**
+ * The needle alone, pointing straight up, for the "rotating layer" mode: the renderer turns this
+ * layer about the dial's pivot, so moving the needle costs one small message and no pixels. The
+ * picture is the same as the composited needle (fx.js draws it). Returns { cv, w, h, px, py }:
+ * the pivot (px, py) is at the bottom centre of the image.
+ */
+function needleSprite(o) {
+    const FX = require('./fx');
+    const m = arcFx(o).main, half = Math.ceil(m.wid / 2 + 18), h = m.len + 3 + 18;
+    const spec = { id: 'arc-needle', w: half * 2, h, cx: half, cy: h, main: m, subs: [], hub: null, ring: null, lights: null };
+    const cv = new Canvas(half * 2, h).clear([0, 0, 0, 0]), clear = new Uint8Array(cv.d.length);
+    FX.compose(spec, { a: 0, b: 0, c: 0, lv: 0 }, clear, cv.d, [{ x: 0, y: 0, w: half * 2, h }]);
+    return { cv, w: half * 2, h, px: half, py: h };
+}
+
 /* ---------- the readout panels: cells redrawn one at a time, only their rectangles sent ---------- */
 
 class Panel {
@@ -244,13 +274,40 @@ function clearRect(cv, q) {
 }
 
 const LBL = (cv, x, y, s) => cv.text(s, x, y, 18, DIM, { font: 'orbm', align: 'center', literal: true, spacing: 5 });
-/** A big value with its unit to the right, the pair centred on x. */
-function bigValue(cv, x, base, val, unit, col) {
-    const vw = cv.textWidth(val, 96, { font: 'orb', literal: true }), uw = cv.textWidth(unit, 22, { font: 'orbm', literal: true });
-    const left = x - (vw + 12 + uw) / 2;
-    cv.text(val, left, base, 96, col, { font: 'orb', literal: true });
-    cv.text(unit, left + vw + 12, base, 22, DIM, { font: 'orbm', literal: true });
+/**
+ * Figures in fixed slots ("tabular"): every figure and dash is as wide as the widest figure, a point
+ * as wide as a point, so a change of one digit redraws and sends only that digit's slot (about a
+ * sixth of the value), and the figures don't shift sideways as they change. The layout - how many
+ * slots of which kind, the unit, the colour - is centred on x; when it changes (99 -> 100, '--' ->
+ * a value, a warning colour) the whole cell q is drawn again.
+ */
+const FIG_W = {};
+function figW(cv, size) {
+    if (!FIG_W[size]) FIG_W[size] = Math.ceil(Math.max(...'0123456789-'.split('').map((c) => cv.textWidth(c, size, { font: 'orb', literal: true }))));
+    return FIG_W[size];
 }
+function tabular(p, key, q, x, base, val, size, col, unit) {
+    const cv = p.cv, str = String(val), chars = [...str];
+    const dw = figW(cv, size), pw = Math.ceil(cv.textWidth('.', size, { font: 'orb', literal: true }));
+    const widths = chars.map((c) => (c === '.' ? pw : dw));
+    const uw = unit ? Math.ceil(cv.textWidth(unit, 22, { font: 'orbm', literal: true })) : 0;
+    const total = widths.reduce((t, w) => t + w, 0) + (unit ? 12 + uw : 0);
+    const layout = chars.map((c) => (c === '.' ? '.' : 'd')).join('') + '|' + unit + '|' + col;
+    if (p.sig[key] !== layout) {
+        p.sig[key] = layout;
+        clearRect(cv, q);
+        if (!p.whole) p.rects.push(q);
+        Object.keys(p.sig).forEach((k) => { if (k.indexOf(key + '#') === 0) delete p.sig[k]; });
+    }
+    let xx = Math.round(x - total / 2);
+    chars.forEach((c, i) => {
+        const r = { x: xx, y: q.y, w: widths[i], h: q.h };
+        p.cell(key + '#' + i, r, c, (g) => g.text(c, r.x + r.w / 2, base, size, col, { font: 'orb', align: 'center', literal: true }));
+        xx += widths[i];
+    });
+    if (unit) p.cell(key + '#u', { x: xx, y: q.y, w: 12 + uw, h: q.h }, unit, (g) => g.text(unit, xx + 12, base, 22, DIM, { font: 'orbm', literal: true }));
+}
+
 /* rows of a side panel (panel pixels) */
 // value cells: just the figures' box (96 px figures stand ~70 px above the baseline), so a change
 // sends ~130 KB, not the whole row
@@ -261,9 +318,9 @@ const ROW = { l1: 46, v1: { x: 60, y: 80, w: 420, h: 84 }, b1: 156, l2: 226, v2:
 function drawLeft(p, v) {
     const X = 270;
     p.cell('lbl', { x: 0, y: 0, w: 540, h: 60 }, 'x', (cv) => LBL(cv, X, ROW.l1, 'OIL'));
-    p.cell('oil', ROW.v1, v.oil + v.tu + v.oilWarn, (cv) => bigValue(cv, X, ROW.b1, v.oil, v.tu, v.oilWarn ? ORANGE : WHITE));
+    tabular(p, 'oil', ROW.v1, X, ROW.b1, v.oil, 96, v.oilWarn ? ORANGE : WHITE, v.tu);
     p.cell('lbl2', { x: 0, y: 196, w: 540, h: 40 }, 'x', (cv) => LBL(cv, X, ROW.l2, 'COOLANT'));
-    p.cell('cool', ROW.v2, v.cool + v.tu + v.coolWarn, (cv) => bigValue(cv, X, ROW.b2, v.cool, v.tu, v.coolWarn ? ORANGE : WHITE));
+    tabular(p, 'cool', ROW.v2, X, ROW.b2, v.cool, 96, v.coolWarn ? ORANGE : WHITE, v.tu);
     const fb = v.fuel == null ? -1 : Math.round(Math.max(0, Math.min(1, v.fuel)) * 40);
     p.cell('bar', { x: 90, y: ROW.bar.y - 8, w: 360, h: 26 }, String(fb), (cv) => {
         const b = ROW.bar;
@@ -280,9 +337,9 @@ function drawLeft(p, v) {
 function drawRight(p, v) {
     const X = 270;
     p.cell('lbl', { x: 0, y: 0, w: 540, h: 60 }, 'x', (cv) => LBL(cv, X, ROW.l1, 'BOOST'));
-    p.cell('boost', ROW.v1, v.boost, (cv) => bigValue(cv, X, ROW.b1, v.boost, 'PSI', WHITE));
+    tabular(p, 'boost', ROW.v1, X, ROW.b1, v.boost, 96, WHITE, 'PSI');
     p.cell('lbl2', { x: 0, y: 196, w: 540, h: 40 }, 'x', (cv) => LBL(cv, X, ROW.l2, 'TORQUE'));
-    p.cell('torque', ROW.v2, v.torque + v.tq, (cv) => bigValue(cv, X, ROW.b2, v.torque, v.tq, WHITE));
+    tabular(p, 'torque', ROW.v2, X, ROW.b2, v.torque, 96, WHITE, v.tq);
     p.cell('odoL', { x: 0, y: 396, w: 540, h: 36 }, 'x', (cv) => LBL(cv, X, 420, 'ODOMETER'));
     p.cell('odo', ROW.foot, v.odo, (cv) => cv.text(v.odo, X, ROW.fb, 26, WHITE, { font: 'orb', align: 'center', literal: true }));
 }
@@ -301,7 +358,7 @@ function drawStrip(p, v) {
 /** Gear and speed inside the tach. v: { gear, speed, unit } */
 function drawCentre(p, v) {
     p.cell('gear', { x: 0, y: 30, w: 300, h: 150 }, v.gear, (cv) => bigText(cv, v.gear, 150, 160, 118, WHITE));
-    p.cell('speed', { x: 30, y: 184, w: 240, h: 70 }, v.speed, (cv) => cv.text(v.speed, 150, 247, 64, WHITE, { font: 'orb', align: 'center', literal: true }));
+    tabular(p, 'speed', { x: 30, y: 184, w: 240, h: 70 }, 150, 247, v.speed, 64, WHITE, '');
     p.cell('unit', { x: 60, y: 258, w: 180, h: 30 }, v.unit, (cv) => cv.text(v.unit, 150, 280, 18, ORANGE, { font: 'orbm', align: 'center', literal: true, spacing: 4 }));
 }
 
@@ -330,7 +387,7 @@ function bigText(cv, str, x, y, size, col) {
 }
 
 module.exports = {
-    bigText, gridBackground, graphiteBackground, background, BG_W, BG_H,
+    bigText, needleSprite, gridBackground, graphiteBackground, background, BG_W, BG_H,
     DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
 };

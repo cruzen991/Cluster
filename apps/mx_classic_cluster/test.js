@@ -154,6 +154,15 @@ for (const st of ['tech']) {
         assert(inside > 50, 'the bigger numeral changed pixels');
         A.pasteNumeral(face, base, nums[4], 0);
         assert(Buffer.compare(face.d, before) === 0, 'back to size 0 restores the face exactly');
+        // the rectangle returned covers every pixel a size change touches
+        for (const [from, to] of [[0, 3], [3, 6], [6, 2], [2, 0]]) {
+            A.pasteNumeral(face, base, nums[5], from);
+            const was = Buffer.from(face.d), r = A.pasteNumeral(face, base, nums[5], to, from);
+            for (let k = 0; k < face.d.length; k += 4) if (face.d[k] !== was[k] || face.d[k + 3] !== was[k + 3]) {
+                const x = (k / 4) % A.DW, y = Math.floor(k / 4 / A.DW);
+                assert(x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h, 'numeral size ' + from + '->' + to + ': pixel ' + x + ',' + y + ' outside ' + JSON.stringify(r));
+            }
+        }
     }
     // the panels: the first take is whole, then only changed cells
     const L = A.arcLayout(0);
@@ -174,14 +183,37 @@ for (const st of ['tech']) {
     assert.strictEqual(p.take().whole, true);
     A.drawRight(p, t.right);
     assert.strictEqual(p.take().rects.length, 0, 'nothing changed, nothing sent');
-    A.drawRight(p, Object.assign({}, t.right, { boost: '13.0' }));
-    assert.strictEqual(p.take().rects.length, 1, 'one cell changed');
+    A.drawRight(p, Object.assign({}, t.right, { boost: '12.4' }));
+    const one = p.take().rects;
+    assert.strictEqual(one.length, 1, 'one digit changed, one slot sent');
+    assert(one[0].w < 90, 'only that digit (' + one[0].w + ' px wide)');
+    A.drawRight(p, Object.assign({}, t.right, { boost: '9.8' }));
+    assert(p.take().rects.some((q) => q.w >= 400), 'fewer digits: the whole value again');
     // big gear letters draw (the 110 px atlas has only figures)
     const g = new A.Panel(L.centre.w, L.centre.h);
     A.drawCentre(g, { gear: 'M', speed: '0', unit: 'MPH' });
     let lit = 0;
     for (let y = 40; y < 175; y++) for (let x = 0; x < 300; x++) if (g.cv.d[(y * 300 + x) * 4 + 3] > 128) lit++;
     assert(lit > 1500, 'the gear letter is drawn (' + lit + ')');
+}
+
+/* the rotating needle: its sprite is the composited needle, pointing up, pivot at the bottom centre */
+{
+    const A = require('./arc');
+    const o = { redline: 7000, max: 8000 }, n = A.needleSprite(o), sp = A.arcFx(o);
+    assert.strictEqual(n.px * 2, n.w); assert.strictEqual(n.py, n.h);
+    let diff = 0;
+    for (let y = 0; y < n.h; y += 2) for (let x = 0; x < n.w; x += 2) {
+        const want = FX.shade(sp, sp.cx - n.px + x + 0.5, sp.cy - n.py + y + 0.5, { a: 0, b: 0, c: 0, lv: 0 });
+        const i = (y * n.w + x) * 4;
+        // the dial's ring and lights are not in the sprite: compare only the needle's own pixels
+        const r = Math.hypot(x + 0.5 - n.px, y + 0.5 - n.py);
+        if (Math.abs(r - 182) < 8 || r > 320) continue;
+        diff = Math.max(diff, Math.abs(want[3] - n.cv.d[i + 3]));
+    }
+    assert(diff <= 2, 'sprite matches the composited needle (' + diff + ')');
+    const st = { a: 30, b: 0, c: 0, lv: 0 }, noNeedle = Object.assign({}, sp, { main: null });
+    assert(!/u_v\.x\);/.test(FX.shader(noNeedle)) && FX.dirty(noNeedle, { a: 0, b: 0, c: 0, lv: 0 }, st).every((q) => q.w * q.h < 4000), 'no needle: only the lit arc moves');
 }
 
 /* the arc background: half size, opaque, dark above the horizon, lines below it */
@@ -234,6 +266,7 @@ for (const st of ['tech']) {
     assert(!spec.settings.some((x) => x.key === 'illum'));
     assert(spec.config.dme.iat.length >= 1 && spec.signals['de.bmw.infrastructure.EnvironmentalInformation']._optional);
     assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "redraw");
+    assert.deepStrictEqual(spec.settings.find((x) => x.key === 'needles').options.map((o) => o[0]), ['redraw', 'rotate', 'shader']);
     assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
 }
 

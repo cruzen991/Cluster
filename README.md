@@ -116,7 +116,7 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which othe
 Show on the cluster; gauge style (Tech, Arc); background (Arc: horizon grid or graphite); torque in lb-ft or Nm (Arc); shift lights (on); stock cluster hidden (default) or showing
 between the dials; mph or km/h; °F or °C; redline (7000 for a
 B58); the needle sweep at start; tank size (59 l for a G20 M340i); moving the dials apart, together, up or down;
-needles drawn as redrawn images (default) or by a shader; boost signal gauge or absolute; retry after BMW pop-ups (off); demo data on the cluster
+needles drawn as redrawn images (default), as a rotating layer (Arc style) or by a shader; boost signal gauge or absolute; retry after BMW pop-ups (off); demo data on the cluster
 (never, by default).
 
 The *Needle sweep* button sweeps whatever the *Needle sweep at start* setting says (that setting only controls the
@@ -170,6 +170,24 @@ again, press the controller's MENU or HOME button, or hold the volume knob down 
 
 Preview on a PC (no SDK, nothing installable): `python3 kit/tools/build.py --preview-only mx_classic_cluster`,
 then `node kit/tools/preview.js dist/mx_classic_cluster preview wait=8 render`.
+
+## Performance (Arc style)
+
+What the Arc style sends to the cluster while driving hard (a desk simulation: revs climbing 2,000 to 6,800
+rpm every 3 s, boost and torque following), by needle setting:
+
+| Needles | Sent to the cluster | How the needle moves |
+|---|---|---|
+| Redrawn images (default) | about 2.0 MB/s | 5 times a second, the dial's pixels redrawn |
+| Rotating layer | about 0.7 MB/s | 30 times a second: the needle is its own small layer that the renderer turns (a message of a few bytes); only the lit arc, the shift lights and the growing numerals are redrawn |
+| Shader | about 0.7 MB/s | every frame, from one uniform |
+
+The readouts draw their figures in fixed slots, so a change of one digit sends only that digit; a growing
+numeral sends only its changed ink. Before 0.11.0 the same drive sent about 3 MB/s (redrawn). cluster-render's
+upload budget is 2-5.5 MB/s, shared by every app on the cluster.
+
+*Rotating layer* and *Shader* are not yet confirmed on a car. If the needle does not show with either, set
+*Redrawn images* again.
 
 ## How the cluster is drawn
 

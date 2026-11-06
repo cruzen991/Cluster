@@ -35,6 +35,8 @@ const FPS = 30;
 const MIN_STEP_DEG = 0.1;
 const LCD_MIN_MS = 200;            // an LCD's text is redrawn at most 5 times a second
 const REDRAW_FPS = 5;              // redrawn mode: dial updates a second at most (each costs CPU)
+const ROTATE_FPS = 15;             // rotating mode (arc): the lit arc / lights / numerals redrawn up to this often; tiny rectangles
+const ROTATE_MIN_DEG = 0.1;        // and the needle layer turned for a move of at least this
 const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
 const MAX_LAYERS = 8;              // cluster-render's per-client limit
 /* arc style: how often each slow value shown is refreshed (ms); a value that was missing shows at once */
@@ -235,9 +237,12 @@ class ClassicCluster {
         R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: A.BG_W, ih: A.BG_H, sampling: 'bilinear' });
         cr.pixels(R.back, null, buf(art.bg));
 
-        this.mode = s.needles === 'redraw' ? 'redraw' : 'shader';
+        this.mode = s.needles === 'shader' ? 'shader' : s.needles === 'rotate' ? 'rotate' : 'redraw';
         const spec = A.arcFx(o);
         if (!s.shift) spec.lights = null;
+        // rotating mode: the needle is a layer of its own the renderer turns about the pivot; the dial
+        // image keeps the lit arc, the shift lights and the numerals
+        if (this.mode === 'rotate') spec.main = null;
         const levels = art.nums.map(() => 0);
         const face = A.faceWith(art.base, art.nums, levels);
         const d = { ref: img(Object.assign({ z: 0 }, L.dial)), spec, face, base: art.base, nums: art.nums, levels, st: null, at: 0, numAt: 0 };
@@ -248,6 +253,14 @@ class ClassicCluster {
             cr.uniform(d.fx, 'u_v', [F.A0, F.SUB.a0, 0, F.SUB.a0]);
             R.dialFx = d.fx;
         } else {
+            if (this.mode === 'rotate') {
+                const n = A.needleSprite(o);
+                d.needle = img({ z: 2, x: L.dial.x + A.DCX - n.px, y: L.dial.y + A.DCY - n.py, w: n.w, h: n.h, px: n.px, py: n.py,
+                    rotate: F.A0, sampling: 'bilinear' });
+                cr.pixels(d.needle, null, buf(n.cv));
+                d.needleAt = F.A0;
+                R.needle = d.needle;
+            }
             d.live = new F.Canvas(A.DW, A.DH);
             d.pending = true;
             const cur = this.cr;
@@ -270,7 +283,7 @@ class ClassicCluster {
         if (count > MAX_LAYERS) this.log.warn(count + ' layers asked for, more than cluster-render allows one app (' + MAX_LAYERS + ')');
         this.groups = {};
         const g = (name, refs) => refs.forEach((ref) => { if (ref) this.groups[ref] = name; });
-        g('background', [R.back]); g('dials', [R.dial]); g('moving', [R.dialFx]); g('readouts', [R.centre, R.left, R.right, R.strip]);
+        g('background', [R.back]); g('dials', [R.dial]); g('moving', [R.dialFx, R.needle]); g('readouts', [R.centre, R.left, R.right, R.strip]);
         this.state.layers = {}; this.state.why = {};
         this.sends = 0;
         this.layerCount = count;
@@ -302,7 +315,7 @@ class ClassicCluster {
             this.centerKey = null; this.centerSpeed = null; this.centerAt = 0;
         }
 
-        this.mode = s.needles === 'redraw' ? 'redraw' : 'shader';
+        this.mode = s.needles === 'shader' ? 'shader' : 'redraw';     // 'rotate' is the arc style's only: redrawn here
         this.dials = {};
         const dial = (key, face, kind, cx, cy) => {
             const ref = img({ z: 0, x: cx - C, y: cy - C, w: D, h: D });
@@ -427,18 +440,20 @@ class ClassicCluster {
             const lv2 = A.numeralLevels(rpm, d.nums.length);
             const changed = [];
             lv2.forEach((k, i) => { if (k !== d.levels[i]) changed.push(i); });
+            // rotating mode: the needle layer turns every tick (30 a second), a message of a few bytes
+            if (d.needle && Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG) { this.cr.set(d.needle, { rotate: round2(a) }); d.needleAt = a; this.sends++; }
             if (this.mode === 'shader') {
                 this.dialState('tach', st, now);
                 if (changed.length && now - d.numAt >= 1000 / 10) {
-                    const rects = changed.map((i) => { d.levels[i] = lv2[i]; A.pasteNumeral(d.face, d.base, d.nums[i], lv2[i]); return d.nums[i].box; });
+                    const rects = changed.map((i) => { const from = d.levels[i]; d.levels[i] = lv2[i]; return A.pasteNumeral(d.face, d.base, d.nums[i], lv2[i], from); });
                     this.cr.pixels(d.ref, rects, cropMany(d.face, rects));
                     d.numAt = now; this.sends++;
                 }
-            } else if (now - d.at >= 1000 / REDRAW_FPS) {
+            } else if (now - d.at >= 1000 / (this.mode === 'rotate' ? ROTATE_FPS : REDRAW_FPS)) {
                 const o = d.st;
                 const moved = !o || o.lv !== st.lv || Math.abs(o.a - st.a) >= REDRAW_MIN_DEG;
                 if (moved || changed.length) {
-                    const boxes = changed.map((i) => { d.levels[i] = lv2[i]; A.pasteNumeral(d.face, d.base, d.nums[i], lv2[i]); return d.nums[i].box; });
+                    const boxes = changed.map((i) => { const from = d.levels[i]; d.levels[i] = lv2[i]; return A.pasteNumeral(d.face, d.base, d.nums[i], lv2[i], from); });
                     const rects = FX.fewer((moved ? FX.dirty(d.spec, o, st) : []).concat(boxes), FX.MAX_RECTS);
                     FX.compose(d.spec, st, d.face.d, d.live.d, rects);
                     d.st = st; d.at = now; this.sends++;
