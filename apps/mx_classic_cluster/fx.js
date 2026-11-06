@@ -29,6 +29,9 @@ const v3 = (c) => 'vec3(' + c.slice(0, 3).map((x) => f(x / 255)).join(', ') + ')
 /** The kite outline of a hollow needle, right half: points in needle space (x right, y down, tip up). */
 function kite(n) {
     const hw = n.wid / 2;
+    // n.inner: a needle that starts that far out from the pivot (the arc style's, around the gear);
+    // its tail is then -inner, so the cap below cuts it there
+    if (n.inner) return { T: [0, -n.len - 3], R1: [hw, -(n.inner + (n.len - n.inner) * 0.3)], R2: [hw * 0.77, -n.inner] };
     return { T: [0, -n.len - 3], R1: [hw, -n.len * 0.2], R2: [hw * 0.77, n.tail] };
 }
 /** Outward unit normal and offset of the line through P0, P1 (right half, so outward is +x side). */
@@ -115,7 +118,7 @@ function shader(spec) {
         out.push('      over(mix(' + v3(m.col.core) + ', ' + v3(m.col.hi) + ', spine), -0.7 - d);');
         out.push('    } }');
     }
-    out.push('  hub(pc, ' + hubArgs(H) + ');');
+    if (H) out.push('  hub(pc, ' + hubArgs(H) + ');');
     out.push('  gl_FragColor = acc.a > 0.0 ? vec4(acc.rgb / acc.a, acc.a) : vec4(0.0);');
     out.push('}');
     return out.join('\n');
@@ -193,7 +196,7 @@ function shade(spec, x, y, st) {
             }
         }
     }
-    hub(pcx, pcy, spec.hub);
+    if (spec.hub) hub(pcx, pcy, spec.hub);
     return acc[3] > 0 ? [acc[0] / acc[3], acc[1] / acc[3], acc[2] / acc[3], acc[3] * 255] : [0, 0, 0, 0];
 }
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -243,7 +246,7 @@ function compose(spec, st, face, live, rects) {
     const lIn = L ? Math.max(0, L.r - L.w / 2 - 1) ** 2 : 0, lOut = L ? (L.r + L.w / 2 + 1) ** 2 : -1;
     const lStep = L ? (L.a1 - L.a0) / L.n : 0;
     const flash = L && st.lv > L.n + 0.5, flashOn = flash && st.lv < L.n + 1.5;
-    const hubR2 = (H.r + 1) * (H.r + 1);
+    const hubR2 = H ? (H.r + 1) * (H.r + 1) : -1;
 
     for (const q of rects) {
         for (let y = q.y; y < q.y + q.h; y++) {
@@ -301,7 +304,7 @@ function compose(spec, st, face, live, rects) {
                         }
                     }
                 }
-                if (r2 <= hubR2) hubPx(px, py, H, H.r);
+                if (H && r2 <= hubR2) hubPx(px, py, H, H.r);
                 if (AA <= 0) { live[i] = face[i]; live[i + 1] = face[i + 1]; live[i + 2] = face[i + 2]; live[i + 3] = face[i + 3]; continue; }
                 const fr = AR / AA, fg = AG / AA, fb = AB / AA;
                 const ba = face[i + 3] / 255, oa = AA + ba * (1 - AA), k = ba * (1 - AA);

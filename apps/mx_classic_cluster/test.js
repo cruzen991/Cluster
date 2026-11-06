@@ -104,6 +104,87 @@ for (const st of ['tech', 'classic']) {
     for (const stl of ['classic', 'sport']) assert.strictEqual(F.lcd('2', '', { style: stl, center: true }).d[3], 0, stl + ' window transparent');
 }
 
+/* the arc style */
+{
+    const A = require('./arc');
+    const { arcTexts, MAX_LAYERS } = require('./cluster');
+    for (const rl of [6000, 7000, 8500]) {
+        const o = { redline: rl, max: tachMax(rl) };
+        const base = A.arcFace(o), nums = A.numerals(o), sp = A.arcFx(o);
+        assert.strictEqual(base.d.length, A.DW * A.DH * 4);
+        assert.strictEqual(nums.length, o.max / 1000 + 1, 'a numeral per 1000 rpm');
+        nums.forEach((n) => assert(n.box.x >= 0 && n.box.y >= 0 && n.box.x + n.box.w <= A.DW && n.box.y + n.box.h <= A.DH, 'numeral box inside'));
+        const src = FX.shader(sp);
+        assert(!/NaN|undefined|Infinity/.test(src) && !/hub\(pc/.test(src), 'arc shader: no hub');
+        // the needle starts outside the gear disc, reaches the ticks
+        const at = (r, ang) => [sp.cx + Math.sin(ang * Math.PI / 180) * r, sp.cy - Math.cos(ang * Math.PI / 180) * r];
+        const st = { a: 0, b: 0, c: 0, lv: 0 };
+        assert.strictEqual(FX.shade(sp, ...at(A.NEEDLE_IN - 20, 0), st)[3], 0, 'nothing on the gear disc beyond the glow');
+        assert(FX.shade(sp, ...at(240, 0), st)[3] > 100, 'needle at r 240');
+        // the compositor matches the reference and dirty rectangles cover each change
+        const live = new F.Canvas(A.DW, A.DH);
+        FX.compose(sp, st, base.d, live.d, [{ x: 0, y: 0, w: A.DW, h: A.DH }]);
+        const [px, py] = at(240, 0).map(Math.floor);
+        let edge = 0;
+        for (let x = px - 14; x <= px + 14; x++) edge = Math.max(edge, live.d[(py * A.DW + x) * 4]);
+        assert(edge > 200, 'composited needle has its orange edge');
+        const o2 = { a: -40, b: 0, c: 0, lv: 0 }, n2 = { a: 30, b: 0, c: 0, lv: 4 };
+        const rects = FX.dirty(sp, o2, n2);
+        const inR = (x, y) => rects.some((q) => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h);
+        for (let y = 0; y < sp.h; y += 3) for (let x = 0; x < sp.w; x += 3) {
+            const p = FX.shade(sp, x + 0.5, y + 0.5, o2), q = FX.shade(sp, x + 0.5, y + 0.5, n2);
+            if (Math.abs(p[3] - q[3]) > 1 || Math.abs(p[0] - q[0]) > 1) assert(inR(x, y), 'arc pixel ' + x + ',' + y + ' outside the rectangles');
+        }
+    }
+    // numerals grow towards the needle: biggest at it, back to normal a thousand rpm away
+    assert.deepStrictEqual(A.numeralLevels(3000, 9), [0, 0, 0, A.NL - 1, 0, 0, 0, 0, 0]);
+    const half = A.numeralLevels(3400, 9);
+    assert(half[3] > 0 && half[4] > 0 && half[3] < A.NL - 1 && half[4] < A.NL - 1, 'two numerals part grown between them');
+    assert.deepStrictEqual(A.numeralLevels(NaN, 3), [A.NL - 1, 0, 0], 'no rpm: as at 0');
+    // pasting a numeral changes only its box
+    {
+        const o = { redline: 7000, max: 8000 }, base = A.arcFace(o), nums = A.numerals(o);
+        const face = A.faceWith(base, nums, nums.map(() => 0)), before = Buffer.from(face.d);
+        A.pasteNumeral(face, base, nums[4], A.NL - 1);
+        const q = nums[4].box;
+        let inside = 0;
+        for (let k = 0; k < face.d.length; k += 4) if (face.d[k + 3] !== before[k + 3] || face.d[k] !== before[k]) {
+            const x = (k / 4) % A.DW, y = Math.floor(k / 4 / A.DW);
+            assert(x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h, 'paste outside the box'); inside++;
+        }
+        assert(inside > 50, 'the bigger numeral changed pixels');
+        A.pasteNumeral(face, base, nums[4], 0);
+        assert(Buffer.compare(face.d, before) === 0, 'back to size 0 restores the face exactly');
+    }
+    // the panels: the first take is whole, then only changed cells
+    const L = A.arcLayout(0);
+    ['dial', 'centre', 'left', 'right', 'strip'].forEach((k) => {
+        const q = L[k];
+        assert(q.x >= 0 && q.y >= 0 && q.x + q.w <= W && q.y + q.h <= H, k + ' inside the panel');
+    });
+    assert(L.left.x + L.left.w <= L.dial.x + 60 && L.right.x >= L.dial.x + L.dial.w - 60, 'readouts beside the dial');
+    const s = { tempUnit: 'f', torqueUnit: 'lbft', units: 'mph' };
+    const v = { oilC: 90, coolC: 88, iatC: 30, outsideC: 18, boostPsi: 12.34, torqueNm: 400, fuel: 0.5, speedText: '48', gearText: 'D3', rangeText: '212 mi', odoText: '41,820 mi', modeText: 'Sport Plus' };
+    const t = arcTexts(s, v, false);
+    assert.deepStrictEqual([t.left.oil, t.left.cool, t.right.boost, t.right.torque, t.right.tq, t.strip.intake, t.strip.outside, t.strip.mode, t.right.odo],
+        ['194', '190', '12.3', '295', 'LB-FT', '86°F', '64°F', 'SPORT PLUS', '41,820 MI']);
+    const tn = arcTexts({ tempUnit: 'c', torqueUnit: 'nm', units: 'kmh' }, { boostPsi: null, torqueNm: NaN, iatC: null }, false);
+    assert.deepStrictEqual([tn.right.boost, tn.right.torque, tn.right.tq, tn.strip.intake, tn.left.oil, tn.centre.unit], ['--', '--', 'NM', '--', '--', 'KM/H']);
+    const p = new A.Panel(L.right.w, L.right.h);
+    A.drawRight(p, t.right);
+    assert.strictEqual(p.take().whole, true);
+    A.drawRight(p, t.right);
+    assert.strictEqual(p.take().rects.length, 0, 'nothing changed, nothing sent');
+    A.drawRight(p, Object.assign({}, t.right, { boost: '13.0' }));
+    assert.strictEqual(p.take().rects.length, 1, 'one cell changed');
+    // big gear letters draw (the 110 px atlas has only figures)
+    const g = new A.Panel(L.centre.w, L.centre.h);
+    A.drawCentre(g, { gear: 'M', speed: '0', unit: 'MPH' });
+    let lit = 0;
+    for (let y = 40; y < 175; y++) for (let x = 0; x < 300; x++) if (g.cv.d[(y * 300 + x) * 4 + 3] > 128) lit++;
+    assert(lit > 1500, 'the gear letter is drawn (' + lit + ')');
+}
+
 /* a bad sample never freezes a needle */
 {
     const C = require('./cluster');
@@ -129,6 +210,8 @@ for (const st of ['tech', 'classic']) {
     const r = spec.settings.find((x) => x.key === 'renderer');
     assert(r && r.default === 'software' && r.hidden && r.reset);
     assert.strictEqual(spec.settings.find((x) => x.key === 'style').default, 'tech');
+    assert(spec.settings.find((x) => x.key === 'style').options.some((o) => o[0] === 'arc'));
+    assert(spec.config.dme.iat.length >= 1 && spec.signals['de.bmw.infrastructure.EnvironmentalInformation']._optional);
     assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "redraw");
     assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
 }

@@ -26,6 +26,9 @@ const START_DELAY_MS = 1500;       // the cluster starts this long after the app
 const TOGGLE_MS = 1000;            // presses of on / off closer than this are one press
 const KOMBI = 'de.bmw.infotainment.KombiIF';
 const FES = 'de.bmw.infotainment.drivingexcitement.FES';
+const ENV = 'de.bmw.infrastructure.EnvironmentalInformation';
+const IAT_MS = 3000;               // intake air temperature: one read from the engine unit every 3 s (arc style only)
+const IAT_STALE_MS = 15000;        // and shown as -- when the last good one is older than this
 const { modeOf, boostPsiOf } = require('./modes');
 
 mgu.run({
@@ -45,7 +48,8 @@ mgu.run({
             dy: Number(settings.get('dy')) || 0,
             demo: settings.get('demo') === 'on',
             retake: settings.get('retake') === true,
-            style: ['classic', 'sport'].indexOf(settings.get('style')) >= 0 ? settings.get('style') : 'tech',
+            style: ['classic', 'sport', 'arc'].indexOf(settings.get('style')) >= 0 ? settings.get('style') : 'tech',
+            torqueUnit: settings.get('torqueUnit') === 'nm' ? 'nm' : 'lbft',
             shift: settings.get('shift') !== false,
             needles: settings.get('needles') === 'shader' ? 'shader' : 'redraw',
         });
@@ -56,7 +60,13 @@ mgu.run({
         // boost: the sport display's boost pressure (FES statusSwitchDriveDynamicSport2), raw x 0.01 bar,
         // 255 = no value; the scaling is the idrive7-apps Live Data app's (marked "scale?" there)
         let boostBar = null, boostAt = 0;
-        const car = new Car(ctx, ['rpm', 'speed', 'temps', 'gear'], {
+        // outside temperature (raw x 0.5 - 40 deg C, 255 = none; the kit apps' scaling), for the arc style
+        let outsideC = null, outsideAt = 0;
+        const car = new Car(ctx, ['rpm', 'speed', 'temps', 'gear', 'torque'], {
+            [ENV]: { ExteriorTemperature: (v) => {
+                const r = v && v.temperatureExterior;
+                if (typeof r === 'number' && r >= 0 && r < 255) { outsideC = r * 0.5 - 40; outsideAt = Date.now(); }
+            } },
             [KOMBI]: { statusRangeTankStatus: (v) => {
                 if (!v) return;
                 const l = v.fluidLevelFuelTank, r = v.range, o = v.mileageKilometre;
@@ -116,15 +126,43 @@ mgu.run({
             apply();
         });
 
+        /* ---------- intake air temperature, only while the arc style is on the cluster ----------
+         * Read from the engine unit (DME, 0x12) over the head unit's diagnostic link, READ-ONLY
+         * (kit/readonly-diag.js: it refuses anything but 0x22 / OBD 01 reads), the candidates M Vitals
+         * uses (app.json config.dme.iat). The link is made the first time it is needed. */
+        let iatC = null, iatAt = 0, iatBusy = false, diag = null;
+        setInterval(async () => {
+            const s = S();
+            if (iatBusy || s.style !== 'arc' || !cluster.enabled) return;
+            iatBusy = true;
+            try {
+                if (!diag) {
+                    const { ReadOnlyDiag } = require('./kit/readonly-diag');
+                    const { DidReader } = require('./kit/dids');
+                    const link = new ReadOnlyDiag(ctx.signals, log);
+                    link.quiet = true;
+                    link.init().catch((e) => log.warn('diagnostic link: ' + e));
+                    diag = new DidReader(link, { ecu: 0x12 });
+                }
+                const dme = (ctx.spec.config && ctx.spec.config.dme) || {};
+                const v = await diag.value('iat', dme.iat);
+                if (v !== null && v > -40 && v < 150) { iatC = v; iatAt = Date.now(); }
+            } catch (e) { log.warn('intake temperature: ' + (e && e.message || e)); }
+            iatBusy = false;
+        }, IAT_MS);
+
         /* ---------- values for the cluster, 30 times a second ---------- */
         const read = () => {
             const s = S(), d = car.data(), now = Date.now();
             const fresh = lastTick && now - lastTick < STALE_MS;
             const usable = fresh && (!d.demo || s.demo);
-            const dist = (km) => (km === null ? '---' : String(Math.round(s.units === 'kmh' ? km : km / 1.609344)));
+            const dist = (km) => (km === null ? '---' : commas(Math.round(s.units === 'kmh' ? km : km / 1.609344)));
             const du = s.units === 'kmh' ? 'km' : 'mi';
-            const info = { modeText: d.demo && s.demo ? 'Sport' : modeText, rangeText: (d.demo && s.demo ? '312' : dist(rangeKm)) + ' ' + du, odoText: (d.demo && s.demo ? '23817' : dist(odoKm)) + ' ' + du };
-            if (!usable) return Object.assign({ speed: 0, rpm: 0, fuel: null, oil: null, oilC: null, boost: null, boostPsi: null, speedText: '---', gearText: '-', live: false }, info);
+            const demo = d.demo && s.demo;
+            const info = { modeText: demo ? 'Sport' : modeText, rangeText: (demo ? '312' : dist(rangeKm)) + ' ' + du, odoText: (demo ? '23,817' : dist(odoKm)) + ' ' + du,
+                // slow values: shown while they are recent, whatever the engine is doing
+                outsideC: demo ? 18 : (now - outsideAt < 120000 ? outsideC : null), iatC: demo ? 34 : (now - iatAt < IAT_STALE_MS ? iatC : null) };
+            if (!usable) return Object.assign({ speed: 0, rpm: 0, fuel: null, oil: null, oilC: null, coolC: null, boost: null, boostPsi: null, torqueNm: null, speedText: '---', gearText: '-', live: false }, info);
             const kmh = d.speed || 0, speed = s.units === 'kmh' ? kmh : kmh / 1.609344;
             const oilC = typeof d.oil === 'number' ? d.oil : null;
             const oilDial = oilC === null ? null : s.tempUnit === 'f' ? ((oilC * 9 / 5 + 32) - 120) / 180 : (oilC - 50) / 100;
@@ -132,8 +170,9 @@ mgu.run({
             const boostPsi = d.demo ? Math.max(0, Math.min(19, ((d.rpm || 0) - 1500) / 3500 * 19)) : boostPsiOf(boostBar, boostAt, now, s.boostRef);
             return {
                 speed, rpm: d.rpm || 0, fuel, oil: oilDial, oilC, boostPsi, boost: boostPsi === null ? null : boostPsi / F.BOOST_MAX,
+                coolC: typeof d.coolant === 'number' ? d.coolant : null, torqueNm: typeof d.torque === 'number' ? d.torque : null,
                 speedText: String(Math.round(speed)), gearText: gearText(d), live: !d.demo,
-                rangeText: info.rangeText, odoText: info.odoText, modeText: info.modeText,
+                rangeText: info.rangeText, odoText: info.odoText, modeText: info.modeText, outsideC: info.outsideC, iatC: info.iatC,
             };
         };
         setInterval(() => cluster.update(read()), 1000 / 30);
@@ -209,6 +248,7 @@ function label(state) {
     return { shown: 'On the cluster', parked: 'Waiting: cluster busy', acquiring: 'Asking the cluster', waiting: 'Waiting for the cluster',
         lingering: 'Leaving the cluster', idle: 'Starting', unavailable: 'Cluster not available', disconnected: 'Cluster renderer missing' }[state] || state;
 }
+function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function fmtTemp(c, unit) { return unit === 'f' ? Math.round(c * 9 / 5 + 32) + ' °F' : Math.round(c) + ' °C'; }
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const lerp = (a, b, t) => a + (b - a) * t;

@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Classic BMW round dials with orange needles on the instrument cluster",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -20,10 +20,25 @@
     },
     "de.bmw.infotainment.drivingexcitement.FES": {
       "statusFESVehicleDynamicSwitchHMI": "rs",
-      "statusSwitchDriveDynamicSport2": "rs"
+      "statusSwitchDriveDynamicSport2": "rs",
+      "statusActualValueTorque2": "rs"
     },
     "de.bmw.infotainment.KombiIF": {
       "statusRangeTankStatus": "rs"
+    },
+    "de.bmw.infrastructure.EnvironmentalInformation": {
+      "_optional": "the outside temperature (Arc style)",
+      "ExteriorTemperature": "s"
+    },
+    "com.harman.infotainment.systemfunctions.tasu.tasu.InternalTasu": {
+      "_optional": "the intake air temperature (Arc style)",
+      "_instances": "SystemFunctionsInternalTasuInst1",
+      "_methods": [
+        "sendTasuRequest"
+      ],
+      "_broadcasts": [
+        "sendTasuResponse"
+      ]
     }
   },
   "screens": [
@@ -32,44 +47,349 @@
       "kind": "canvas",
       "title": "Classic Cluster",
       "buttons": [
-        ["BTN_TOGGLE", "Cluster on / off"],
-        ["BTN_SWEEP", "Needle sweep"],
-        ["BTN_SETTINGS", "Settings"]
+        [
+          "BTN_TOGGLE",
+          "Cluster on / off"
+        ],
+        [
+          "BTN_SWEEP",
+          "Needle sweep"
+        ],
+        [
+          "BTN_SETTINGS",
+          "Settings"
+        ]
       ]
     }
   ],
   "settings": [
-    {"key": "on", "label": "Show on the cluster", "type": "bool", "default": true},
-    {"key": "style", "label": "Gauge style", "type": "choice", "default": "tech", "reset": 2,
-     "options": [["tech", "Tech (lit ring, shift lights)"], ["sport", "Sport (white, red needles)"], ["classic", "Classic (orange)"]]},
-    {"key": "units", "label": "Speed", "type": "choice", "default": "mph",
-     "options": [["mph", "mph (km/h inner scale)"], ["kmh", "km/h (mph inner scale)"]]},
-    {"key": "tempUnit", "label": "Oil temperature", "type": "choice", "default": "f",
-     "options": [["f", "Fahrenheit"], ["c", "Celsius"]]},
-    {"key": "illum", "label": "Dial lighting (classic style)", "type": "choice", "default": "orange",
-     "options": [["orange", "Classic orange"], ["white", "White"]]},
-    {"key": "redline", "label": "Redline", "type": "number", "unit": "rpm", "default": 7000,
-     "steps": [5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500]},
-    {"key": "sweep", "label": "Needle sweep at start", "type": "bool", "default": true},
-    {"key": "shift", "label": "Shift lights (Tech style)", "type": "bool", "default": true},
-    {"key": "backdrop", "label": "Stock cluster", "type": "choice", "default": "full", "reset": 1,
-     "options": [["full", "Hidden (black background, centre info)"], ["none", "Shows between the dials"]]},
-    {"key": "boostRef", "label": "Boost signal", "type": "choice", "default": "gauge",
-     "options": [["gauge", "Gauge (0 at idle)"], ["absolute", "Absolute (subtract 14.7 psi)"]]},
-    {"key": "tank", "label": "Fuel tank size", "type": "number", "unit": "l", "default": 59,
-     "steps": [40, 45, 50, 52, 55, 57, 59, 60, 63, 65, 68, 70, 74, 80]},
-    {"key": "dx", "label": "Dials apart", "type": "number", "unit": "px", "default": 0,
-     "steps": [-80, -60, -40, -20, 0, 20, 40, 60, 80]},
-    {"key": "dy", "label": "Dials up / down", "type": "number", "unit": "px", "default": 0,
-     "steps": [-30, -20, -10, 0, 10, 20, 30]},
-    {"key": "needles", "label": "Needles drawn by", "type": "choice", "default": "redraw", "reset": 4,
-     "options": [["redraw", "Redrawn images (default, works on the car)"], ["shader", "Shader (smoother, not yet seen on a car)"]]},
-    {"key": "retake", "label": "Retry after BMW pop-ups (off: wait until the cluster is free)", "type": "bool", "default": false},
-    {"key": "demo", "label": "Demo data on the cluster", "type": "choice", "default": "off",
-     "options": [["off", "Never"], ["on", "Always (parked testing only)"]]},
-    {"key": "renderer", "label": "Renderer", "type": "choice", "default": "software", "reset": 1, "hidden": true,
-     "options": [["software", "Software"]]},
-    {"key": "theme", "label": "Colour theme", "type": "choice", "default": "amber",
-     "options": [["m_red", "M Red"], ["m_tricolour", "M Tricolour"], ["ice", "Ice White"], ["amber", "Night Amber"]]}
-  ]
+    {
+      "key": "on",
+      "label": "Show on the cluster",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "style",
+      "label": "Gauge style",
+      "type": "choice",
+      "default": "tech",
+      "reset": 2,
+      "options": [
+        [
+          "arc",
+          "Arc (one tach, big readouts)"
+        ],
+        [
+          "tech",
+          "Tech (lit ring, shift lights)"
+        ],
+        [
+          "sport",
+          "Sport (white, red needles)"
+        ],
+        [
+          "classic",
+          "Classic (orange)"
+        ]
+      ]
+    },
+    {
+      "key": "units",
+      "label": "Speed",
+      "type": "choice",
+      "default": "mph",
+      "options": [
+        [
+          "mph",
+          "mph (km/h inner scale)"
+        ],
+        [
+          "kmh",
+          "km/h (mph inner scale)"
+        ]
+      ]
+    },
+    {
+      "key": "tempUnit",
+      "label": "Temperatures",
+      "type": "choice",
+      "default": "f",
+      "options": [
+        [
+          "f",
+          "Fahrenheit"
+        ],
+        [
+          "c",
+          "Celsius"
+        ]
+      ]
+    },
+    {
+      "key": "torqueUnit",
+      "label": "Torque (Arc style)",
+      "type": "choice",
+      "default": "lbft",
+      "options": [
+        [
+          "lbft",
+          "lb-ft"
+        ],
+        [
+          "nm",
+          "Nm"
+        ]
+      ]
+    },
+    {
+      "key": "illum",
+      "label": "Dial lighting (classic style)",
+      "type": "choice",
+      "default": "orange",
+      "options": [
+        [
+          "orange",
+          "Classic orange"
+        ],
+        [
+          "white",
+          "White"
+        ]
+      ]
+    },
+    {
+      "key": "redline",
+      "label": "Redline",
+      "type": "number",
+      "unit": "rpm",
+      "default": 7000,
+      "steps": [
+        5000,
+        5500,
+        6000,
+        6500,
+        7000,
+        7500,
+        8000,
+        8500
+      ]
+    },
+    {
+      "key": "sweep",
+      "label": "Needle sweep at start",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "shift",
+      "label": "Shift lights (Tech style)",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "backdrop",
+      "label": "Stock cluster",
+      "type": "choice",
+      "default": "full",
+      "reset": 1,
+      "options": [
+        [
+          "full",
+          "Hidden (black background, centre info)"
+        ],
+        [
+          "none",
+          "Shows between the dials"
+        ]
+      ]
+    },
+    {
+      "key": "boostRef",
+      "label": "Boost signal",
+      "type": "choice",
+      "default": "gauge",
+      "options": [
+        [
+          "gauge",
+          "Gauge (0 at idle)"
+        ],
+        [
+          "absolute",
+          "Absolute (subtract 14.7 psi)"
+        ]
+      ]
+    },
+    {
+      "key": "tank",
+      "label": "Fuel tank size",
+      "type": "number",
+      "unit": "l",
+      "default": 59,
+      "steps": [
+        40,
+        45,
+        50,
+        52,
+        55,
+        57,
+        59,
+        60,
+        63,
+        65,
+        68,
+        70,
+        74,
+        80
+      ]
+    },
+    {
+      "key": "dx",
+      "label": "Dials apart",
+      "type": "number",
+      "unit": "px",
+      "default": 0,
+      "steps": [
+        -80,
+        -60,
+        -40,
+        -20,
+        0,
+        20,
+        40,
+        60,
+        80
+      ]
+    },
+    {
+      "key": "dy",
+      "label": "Dials up / down",
+      "type": "number",
+      "unit": "px",
+      "default": 0,
+      "steps": [
+        -30,
+        -20,
+        -10,
+        0,
+        10,
+        20,
+        30
+      ]
+    },
+    {
+      "key": "needles",
+      "label": "Needles drawn by",
+      "type": "choice",
+      "default": "redraw",
+      "reset": 4,
+      "options": [
+        [
+          "redraw",
+          "Redrawn images (default, works on the car)"
+        ],
+        [
+          "shader",
+          "Shader (smoother, not yet seen on a car)"
+        ]
+      ]
+    },
+    {
+      "key": "retake",
+      "label": "Retry after BMW pop-ups (off: wait until the cluster is free)",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "key": "demo",
+      "label": "Demo data on the cluster",
+      "type": "choice",
+      "default": "off",
+      "options": [
+        [
+          "off",
+          "Never"
+        ],
+        [
+          "on",
+          "Always (parked testing only)"
+        ]
+      ]
+    },
+    {
+      "key": "renderer",
+      "label": "Renderer",
+      "type": "choice",
+      "default": "software",
+      "reset": 1,
+      "hidden": true,
+      "options": [
+        [
+          "software",
+          "Software"
+        ]
+      ]
+    },
+    {
+      "key": "theme",
+      "label": "Colour theme",
+      "type": "choice",
+      "default": "amber",
+      "options": [
+        [
+          "m_red",
+          "M Red"
+        ],
+        [
+          "m_tricolour",
+          "M Tricolour"
+        ],
+        [
+          "ice",
+          "Ice White"
+        ],
+        [
+          "amber",
+          "Night Amber"
+        ]
+      ]
+    }
+  ],
+  "config": {
+    "dme": {
+      "comment": "intake air temperature from the engine unit (0x12), read-only (UDS 0x22 / OBD 01), the same candidates as M Vitals",
+      "ecu": 18,
+      "iat": [
+        {
+          "did": "F40F",
+          "bytes": 1,
+          "at": 0,
+          "factor": 1,
+          "offset": -40,
+          "min": -40,
+          "max": 150
+        },
+        {
+          "did": "F477",
+          "bytes": 1,
+          "at": 1,
+          "factor": 1,
+          "offset": -40,
+          "min": -40,
+          "max": 150,
+          "note": "charge air cooler temperature, bank 1 sensor 1"
+        },
+        {
+          "obd": "0F",
+          "bytes": 1,
+          "at": 0,
+          "factor": 1,
+          "offset": -40,
+          "min": -40,
+          "max": 150,
+          "note": "the same PID with OBD service 01, for engine units that refuse F40F with NRC 31"
+        }
+      ]
+    }
+  }
 }

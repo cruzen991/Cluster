@@ -20,9 +20,13 @@
  *              rectangles (needles "Redrawn images", no shaders at all)
  *   gear       the gear window on the tach
  *   speed      the speed window on the speedometer, only when there is no centre panel
+ *
+ * The arc style (arc.js) has its own set: back, the tach, its fx (shader only), the gear and speed
+ * inside it, the two readout panels and the bottom strip; at most 7.
  */
 const F = require('./faces');
 const FX = require('./fx');
+const A = require('./arc');
 const { ClusterRender } = require('./cluster_render_client');
 
 const TARGET = 'panel';
@@ -33,6 +37,7 @@ const LCD_MIN_MS = 200;            // an LCD's text is redrawn at most 5 times a
 const REDRAW_FPS = 5;              // redrawn mode: dial updates a second at most (each costs CPU)
 const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
 const MAX_LAYERS = 8;              // cluster-render's per-client limit
+const PANEL_MS = 250;              // arc style: readouts redrawn at most 4 times a second (big figures cost upload)
 
 /* where the two dials sit on the panel; dx moves both outwards (+) or inwards (-) */
 function layout(dx, dy) {
@@ -161,6 +166,15 @@ class ClassicCluster {
         this.faceKey = key;
         const gen = this.buildGen = (this.buildGen || 0) + 1, cr = this.cr;
         const live = () => this.buildGen === gen && this.cr === cr;
+        if (s.style === 'arc') {
+            const o = { redline: s.redline, max: tachMax(s.redline) }, t0 = Date.now();
+            later(() => {
+                if (!live()) return;
+                const art = this.arcArt(o);
+                later(() => { if (live()) this._arcLayers(s, o, art, t0); });
+            });
+            return;
+        }
         const centre = s.backdrop === 'full';
         const faceOpts = { style: s.style, units: s.units, illum: s.illum, redline: s.redline, max: tachMax(s.redline), tempUnit: s.tempUnit };
         const t0 = Date.now();
@@ -188,7 +202,77 @@ class ClassicCluster {
         return cv;
     }
 
+    /** The arc style's still artwork (face without numerals, the numeral sprites), cached. */
+    arcArt(o) {
+        const key = 'arc' + JSON.stringify(o);
+        this.faces = this.faces || new Map();
+        let a = this.faces.get(key);
+        if (!a) {
+            a = { base: A.arcFace(o), nums: A.numerals(o) };
+            this.faces.set(key, a);
+            while (this.faces.size > 4) this.faces.delete(this.faces.keys().next().value);
+        }
+        return a;
+    }
+
+    /** The arc style's layers (see arc.js). */
+    _arcLayers(s, o, art, t0) {
+        const cr = this.cr, L = A.arcLayout(s.dy);
+        Object.keys(this.refs).forEach((k) => cr.drop(this.refs[k]));
+        const R = this.refs = {};
+        const base = { target: TARGET, visible: true, contend: s.retake ? 1 : 0 };
+        const img = (q) => cr.image(Object.assign({}, base, q));
+        this.arc = true;
+        // the stock cluster is always hidden in this style: the readouts cover the whole panel
+        const black = new F.Canvas(16, 16).clear('#000000');
+        R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: 16, ih: 16 });
+        cr.pixels(R.back, null, buf(black));
+
+        this.mode = s.needles === 'redraw' ? 'redraw' : 'shader';
+        const spec = A.arcFx(o);
+        if (!s.shift) spec.lights = null;
+        const levels = art.nums.map(() => 0);
+        const face = A.faceWith(art.base, art.nums, levels);
+        const d = { ref: img(Object.assign({ z: 0 }, L.dial)), spec, face, base: art.base, nums: art.nums, levels, st: null, at: 0, numAt: 0 };
+        R.dial = d.ref;
+        if (this.mode === 'shader') {
+            cr.pixels(d.ref, null, buf(face));
+            d.fx = cr.effect(Object.assign({}, base, { z: 2, fs: FX.shader(spec) }, L.dial));
+            cr.uniform(d.fx, 'u_v', [F.A0, F.SUB.a0, 0, F.SUB.a0]);
+            R.dialFx = d.fx;
+        } else {
+            d.live = new F.Canvas(A.DW, A.DH);
+            d.pending = true;
+            const cur = this.cr;
+            later(() => {
+                if (this.cr !== cur || !this.dials || this.dials.tach !== d) return;
+                this.redrawDial(d, { a: F.A0, b: F.SUB.a0, c: F.SUB.a0, lv: 0 }, Date.now(), true);
+                d.pending = false;
+            });
+        }
+        this.dials = { tach: d };
+
+        this.panels = {};
+        for (const k of ['centre', 'left', 'right', 'strip']) {
+            R[k] = img(Object.assign({ z: k === 'centre' ? 3 : 1 }, L[k]));
+            this.panels[k] = { ref: R[k], p: new A.Panel(L[k].w, L[k].h) };
+        }
+        this.panelAt = 0;
+
+        const count = Object.keys(R).length;
+        if (count > MAX_LAYERS) this.log.warn(count + ' layers asked for, more than cluster-render allows one app (' + MAX_LAYERS + ')');
+        this.groups = {};
+        const g = (name, refs) => refs.forEach((ref) => { if (ref) this.groups[ref] = name; });
+        g('background', [R.back]); g('dials', [R.dial]); g('moving', [R.dialFx]); g('readouts', [R.centre, R.left, R.right, R.strip]);
+        this.state.layers = {}; this.state.why = {};
+        this.sends = 0;
+        this.layerCount = count;
+        Object.keys(this.needles).forEach((k) => { this.needles[k].sent = null; });
+        this.log.info(count + ' layers (arc), drawn in ' + (Date.now() - t0) + ' ms');
+    }
+
     _layers(s, faceOpts, speedo, tach, t0) {
+        this.arc = false; this.panels = null;
         const L = layout(s.dx, s.dy);
         const cr = this.cr, r = this.refs;
         const D = F.D, C = F.C;
@@ -304,6 +388,7 @@ class ClassicCluster {
         let lv = shiftLevel(rpm, s.redline);
         if (lv === 11 && Math.floor(now / 1000 * FX.FLASH_HZ * 2) % 2) lv = 12;
         const sub0 = F.SUB.a0;
+        if (this.arc) { this._arcTick(s, v, lerp(F.A0, F.A1, n.rpm.v), n.rpm.v * rpmMax, lv, now); return; }
         this.dialState('speedo', { a: lerp(F.A0, F.A1, n.speed.v), b: F.subAngleOf(n.fuel.v), c: sub0, lv: 0 }, now);
         this.dialState('tach', { a: lerp(F.A0, F.A1, n.rpm.v), b: F.subAngleOf(n.oil.v), c: F.subAngleOf(n.boost.v), lv }, now);
 
@@ -321,6 +406,50 @@ class ClassicCluster {
                 else this.cr.pixels(this.refs.center, [F.CSPEED], crop(cv, F.CSPEED));
                 this.centerKey = key; this.centerSpeed = sp; this.centerAt = now;
             }
+        }
+    }
+
+    /**
+     * The arc style, each tick: the needle (as dialState), the numerals' sizes following the needle
+     * (rpm = where the needle is now), and the readouts (at most 5 times a second, changed cells only).
+     */
+    _arcTick(s, v, a, rpm, lv, now) {
+        const d = this.dials.tach;
+        if (d && !d.pending) {
+            const st = { a, b: F.SUB.a0, c: F.SUB.a0, lv };
+            const lv2 = A.numeralLevels(rpm, d.nums.length);
+            const changed = [];
+            lv2.forEach((k, i) => { if (k !== d.levels[i]) changed.push(i); });
+            if (this.mode === 'shader') {
+                this.dialState('tach', st, now);
+                if (changed.length && now - d.numAt >= 1000 / 10) {
+                    const rects = changed.map((i) => { d.levels[i] = lv2[i]; A.pasteNumeral(d.face, d.base, d.nums[i], lv2[i]); return d.nums[i].box; });
+                    this.cr.pixels(d.ref, rects, cropMany(d.face, rects));
+                    d.numAt = now; this.sends++;
+                }
+            } else if (now - d.at >= 1000 / REDRAW_FPS) {
+                const o = d.st;
+                const moved = !o || o.lv !== st.lv || Math.abs(o.a - st.a) >= REDRAW_MIN_DEG;
+                if (moved || changed.length) {
+                    const boxes = changed.map((i) => { d.levels[i] = lv2[i]; A.pasteNumeral(d.face, d.base, d.nums[i], lv2[i]); return d.nums[i].box; });
+                    const rects = FX.fewer((moved ? FX.dirty(d.spec, o, st) : []).concat(boxes), FX.MAX_RECTS);
+                    FX.compose(d.spec, st, d.face.d, d.live.d, rects);
+                    d.st = st; d.at = now; this.sends++;
+                    if (rects.length) this.cr.pixels(d.ref, rects, cropMany(d.live, rects));
+                }
+            }
+        }
+        if (!this.panels || now - this.panelAt < PANEL_MS) return;
+        this.panelAt = now;
+        const t = arcTexts(s, v, this.sweep);
+        A.drawCentre(this.panels.centre.p, t.centre);
+        A.drawLeft(this.panels.left.p, t.left);
+        A.drawRight(this.panels.right.p, t.right);
+        A.drawStrip(this.panels.strip.p, t.strip);
+        for (const k of ['centre', 'left', 'right', 'strip']) {
+            const P = this.panels[k], out = P.p.take();
+            if (out.whole) this.cr.pixels(P.ref, null, buf(P.p.cv));
+            else if (out.rects.length) this.cr.pixels(P.ref, FX.fewer(out.rects, FX.MAX_RECTS), cropMany(P.p.cv, FX.fewer(out.rects, FX.MAX_RECTS)));
         }
     }
 
@@ -379,6 +508,27 @@ class ClassicCluster {
 }
 
 /**
+ * The arc style's texts from the values and settings: temperatures in the chosen unit, torque in
+ * lb-ft or Nm, '--' for anything the car has not sent.
+ * v: { oilC, coolC, iatC, outsideC (deg C or null), boostPsi, torqueNm (or null), fuel (0..1 or null),
+ *      speedText, gearText, rangeText, odoText, modeText }
+ */
+function arcTexts(s, v, sweep) {
+    const f = s.tempUnit !== 'c', tu = f ? '°F' : '°C';
+    const T = (c) => (c == null || !isFinite(c) ? '--' : String(Math.round(f ? c * 9 / 5 + 32 : c)));
+    const lb = s.torqueUnit !== 'nm';
+    const tq = v.torqueNm == null || !isFinite(v.torqueNm) ? '--' : String(Math.round((lb ? v.torqueNm * 0.737562 : v.torqueNm) / 5) * 5);   // in fives: steadier, fewer uploads
+    const boost = v.boostPsi == null || !isFinite(v.boostPsi) ? '--' : Math.max(0, v.boostPsi).toFixed(1);
+    const up = (x) => String(x == null ? '' : x).toUpperCase();
+    return {
+        centre: { gear: sweep ? '88' : (v.gearText || '-'), speed: sweep ? '888' : (v.speedText == null ? '---' : String(v.speedText)), unit: s.units === 'kmh' ? 'KM/H' : 'MPH' },
+        left: { oil: T(v.oilC), cool: T(v.coolC), tu, oilWarn: v.oilC >= 130, coolWarn: v.coolC >= 112, fuel: v.fuel, range: up(v.rangeText || '---') },
+        right: { boost, torque: tq, tq: lb ? 'LB-FT' : 'NM', odo: up(v.odoText || '---') },
+        strip: { outside: T(v.outsideC) === '--' ? '--' : T(v.outsideC) + tu, mode: up(v.modeText) || 'DRIVE', intake: T(v.iatC) === '--' ? '--' : T(v.iatC) + tu },
+    };
+}
+
+/**
  * Shift lights lit for an rpm: none below redline - 2000, then one more every 200 rpm,
  * all ten at redline - 200, and 11 (all flashing) from the redline.
  */
@@ -421,4 +571,4 @@ const clamp01 = (x) => (!(x > 0) ? 0 : x > 1 ? 1 : x);     // NaN and -Infinity:
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
-module.exports = { ClassicCluster, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };
+module.exports = { ClassicCluster, arcTexts, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };

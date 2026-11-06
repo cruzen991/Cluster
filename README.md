@@ -7,7 +7,7 @@ background while the dials are on; BMW's warning and indicator lights are drawn 
 
 ![The Tech style](docs/cluster.png)
 
-Three gauge styles (Settings → *Gauge style*), all 0-160 mph by default (0-260 km/h in km/h):
+Four gauge styles (Settings → *Gauge style*):
 
 - **Tech** (the default): Orbitron numerals, hollow red needles with a glow, a white ring along each dial that lights
   up behind the needle, and **shift lights**: ten segments outside the tach over the 2,000 rpm below the redline,
@@ -15,6 +15,13 @@ Three gauge styles (Settings → *Gauge style*), all 0-160 mph by default (0-260
   *Shift lights*, on).
 - **Sport**: rimless faces, bold white markings, solid red needles ([picture](docs/sport.png)).
 - **Classic**: chrome rings, orange markings, orange-red needles ([picture](docs/classic.png)).
+- **Arc** (new in 0.10.0): one tachometer in the middle with the gear and speed inside it, an orange arc that fills
+  with the revs, the hollow glow needle and the shift lights; numerals that grow as the needle comes up to them; big
+  readouts left (oil, coolant, fuel bar, range) and right (boost, torque, odometer); and a strip along the bottom
+  with the outside temperature, the drive mode and the intake air temperature ([picture](docs/arc.png)). The stock
+  cluster is always hidden in this style.
+
+The round-dial styles are 0-160 mph by default (0-260 km/h in km/h).
 
 It is an app for the [MGU Store](https://github.com/robertnisipeanu/mgu-store). It draws through
 [cluster-render](https://github.com/robertnisipeanu/idrive-apps/tree/main/native/cluster-render) on the cluster's
@@ -90,12 +97,16 @@ The app's own loop catches its errors, but a freeze is not something it can see 
 | Gear LCD: P, R, N, D1-D8 | `VehicleInformation.statusGearboxDrive` / `DataPowerTrain2` |
 | Drive mode (centre panel, text) | `FES.statusFESVehicleDynamicSwitchHMI` (`actualValueModeDrivingExperience`), decoded with the idrive7-apps Live Data app's table; *DRIVE MODE ---* until the car sends one |
 | Range and odometer (centre panel) | `KombiIF.statusRangeTankStatus` |
+| Coolant (Arc) | `CDS.statusEngineTemperature` |
+| Torque (Arc), lb-ft or Nm, in steps of 5 | `FES.statusActualValueTorque2` (`actualValueTorqueCrankshaft`, 0.5 Nm a bit, the kit's scaling); engine braking shows 0. Treat it as the engine unit's estimate, not a dyno figure; scaling unverified on this car |
+| Outside temperature (Arc) | `EnvironmentalInformation.ExteriorTemperature` (raw x 0.5 - 40 °C) |
+| Intake air temperature (Arc) | read from the engine unit (DME, 0x12) every 3 s over the head unit's diagnostic link, **read-only**: the kit's `readonly-diag.js` refuses anything but ReadDataByIdentifier / OBD reads, so the app cannot write to or reset any control unit. Same candidates as the kit's M Vitals app (`22 F40F`, `22 F477`, OBD PID 0F). Only while the Arc style is on the cluster; `--` when the engine unit does not answer |
 
 The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which other apps already use on cars.
 
 ## Settings
 
-Show on the cluster; gauge style (Tech, Sport, Classic); shift lights (on); stock cluster hidden (default) or showing
+Show on the cluster; gauge style (Tech, Sport, Classic, Arc); torque in lb-ft or Nm (Arc); shift lights (on); stock cluster hidden (default) or showing
 between the dials; mph or km/h; °F or °C; classic orange or white dial lighting (Classic style); redline (7000 for a
 B58); the needle sweep at start; tank size (59 l for a G20 M340i); moving the dials apart, together, up or down;
 needles drawn as redrawn images (default) or by a shader; boost signal gauge or absolute; retry after BMW pop-ups (off); demo data on the cluster
@@ -139,6 +150,7 @@ again, press the controller's MENU or HOME button, or hold the volume knob down 
 | Path | |
 |---|---|
 | `apps/mx_classic_cluster/faces.js` | the still artwork: faces, LCDs, the centre panel; and each style's moving parts as numbers |
+| `apps/mx_classic_cluster/arc.js` | the Arc style: its face, the growing numerals, the readout panels |
 | `apps/mx_classic_cluster/fx.js` | the moving parts (needles, hubs, lit ring, shift lights) as a shader and as its JavaScript twin |
 | `apps/mx_classic_cluster/cluster.js` | the cluster layers through cluster-render, needle smoothing, the sweep |
 | `apps/mx_classic_cluster/main.js` | the app: car data, on/off, safety rules, its own screen |
