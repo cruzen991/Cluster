@@ -201,6 +201,57 @@ function needle(len, tail, width, glow) {
     return { cv, w: cv.w, h: cv.h, px, py };
 }
 
+/**
+ * A needle drawn by a fragment shader on an unturned quad: the quad covers the needle's whole
+ * sweep and the shader draws the needle at the angle in uniform u_a (degrees clockwise from up).
+ * Nothing is turned, so this does not depend on the renderer turning layers.
+ * spec: { w, h (the quad), px, py (the pivot in it), len, tail, wid }
+ */
+const NEEDLE_RGB = { core: [255, 90, 28], edge: [208, 48, 10], hi: [255, 178, 122], glow: [255, 80, 20] };
+const glsl3 = (c) => 'vec3(' + c.map((v) => (v / 255).toFixed(4)).join(', ') + ')';
+const f1 = (v) => (Number.isInteger(v) ? v + '.0' : String(v));
+function needleShader(sp) {
+    return `#version 100
+// cc-needle ${JSON.stringify(sp)}
+precision mediump float;
+uniform float u_a;
+varying vec2 v_uv;
+void main() {
+    vec2 p = v_uv * vec2(${f1(sp.w)}, ${f1(sp.h)}) - vec2(${f1(sp.px)}, ${f1(sp.py)});
+    float a = radians(u_a);
+    float c = cos(a), s = sin(a);
+    vec2 q = vec2(c * p.x + s * p.y, c * p.y - s * p.x);
+    float y = q.y;
+    float hw = y <= 0.0 ? mix(${f1(sp.wid * 0.14)}, ${f1(sp.wid * 0.5)}, clamp((y + ${f1(sp.len)}) / ${f1(sp.len)}, 0.0, 1.0))
+                        : mix(${f1(sp.wid * 0.5)}, ${f1(sp.wid * 0.7)}, clamp(y / ${f1(sp.tail)}, 0.0, 1.0));
+    float d = max(abs(q.x) - hw, max(-${f1(sp.len)} - y, y - ${f1(sp.tail)}));
+    float body = clamp(0.5 - d, 0.0, 1.0);
+    float core = clamp(-0.7 - d, 0.0, 1.0);
+    float glow = (1.0 - smoothstep(0.0, 7.0, d)) * 0.16;
+    vec3 col = mix(${glsl3(NEEDLE_RGB.edge)}, ${glsl3(NEEDLE_RGB.core)}, core);
+    float spine = (1.0 - smoothstep(0.6, 1.6, abs(q.x))) * step(-${f1(sp.len - 4)}, y) * step(y, -${f1(Math.round(sp.len * 0.15))});
+    col = mix(col, ${glsl3(NEEDLE_RGB.hi)}, spine * core);
+    float al = max(body, glow);
+    gl_FragColor = vec4(body > 0.0 ? col : ${glsl3(NEEDLE_RGB.glow)}, al);
+}`;
+}
+/** The shader's twin in JavaScript, for desk previews: straight RGBA at pixel (x, y) of the quad. */
+function needleShade(sp, x, y, ang) {
+    const sm = (e0, e1, v) => { const t = Math.max(0, Math.min(1, (v - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+    const px = x - sp.px, py = y - sp.py, a = ang * RAD, c = Math.cos(a), s = Math.sin(a);
+    const qx = c * px + s * py, qy = c * py - s * px;
+    const hw = qy <= 0 ? lerp(sp.wid * 0.14, sp.wid * 0.5, Math.max(0, Math.min(1, (qy + sp.len) / sp.len)))
+        : lerp(sp.wid * 0.5, sp.wid * 0.7, Math.max(0, Math.min(1, qy / sp.tail)));
+    const d = Math.max(Math.abs(qx) - hw, Math.max(-sp.len - qy, qy - sp.tail));
+    const body = Math.max(0, Math.min(1, 0.5 - d)), core = Math.max(0, Math.min(1, -0.7 - d));
+    const glow = (1 - sm(0, 7, d)) * 0.16;
+    let col = NEEDLE_RGB.edge.map((v, i) => lerp(v, NEEDLE_RGB.core[i], core));
+    const spine = (1 - sm(0.6, 1.6, Math.abs(qx))) * (qy >= -(sp.len - 4) ? 1 : 0) * (qy <= -Math.round(sp.len * 0.15) ? 1 : 0);
+    col = col.map((v, i) => lerp(v, NEEDLE_RGB.hi[i], spine * core));
+    const al = Math.max(body, glow);
+    return [...(body > 0 ? col : NEEDLE_RGB.glow), al * 255];
+}
+
 /** convex() takes convex polygons: the needle outline is split into two convex halves. */
 function convexPoly(cv, p, c) {
     cv.convex([p[0], p[1], p[2], p[5]], c);
@@ -219,15 +270,22 @@ function hub(r) {
     return { cv, w: cv.w, h: cv.h };
 }
 
-/** One warm-up segment, a pill drawn upright (the layer is turned onto the dial). */
-function segment(lit) {
-    const cv = new Canvas(SEG.w, SEG.h);
-    cv.roundRect(2, 2, SEG.w - 4, SEG.h - 4, 3.5, lit ? '#ffa020' : [255, 160, 32, 0]);
-    if (lit) cv.roundRect(3.5, 3.5, SEG.w - 7, (SEG.h - 4) * 0.4, 2.5, [255, 225, 160, 110]);
+/**
+ * One warm-up segment, a pill already turned to angle a (degrees clockwise), in a small square
+ * image: its layer is placed, never turned.
+ */
+function segment(a) {
+    const n = SEG.box, cv = new Canvas(n, n), c = n / 2;
+    const ux = Math.sin(a * RAD), uy = -Math.cos(a * RAD);       // along the radius
+    const vx = Math.cos(a * RAD), vy = Math.sin(a * RAD);        // across it
+    const hl = (SEG.h - 4) / 2, hw = (SEG.w - 4) / 2;
+    const quad = (l, w) => [[c - ux * l - vx * w, c - uy * l - vy * w], [c + ux * l - vx * w, c + uy * l - vy * w],
+        [c + ux * l + vx * w, c + uy * l + vy * w], [c - ux * l + vx * w, c - uy * l + vy * w]];
+    cv.convex(quad(hl, hw), '#ffa020');
+    cv.convex(quad(hl * 0.45, hw * 0.5).map(([x, y]) => [x + ux * hl * 0.35, y + uy * hl * 0.35]), [255, 225, 160, 110]);
     return cv;
 }
-// between the numerals (out to about r 238) and the major ticks' inner ends (r 256)
-const SEG = { r: 247, w: 12, h: 18 };
+const SEG = { r: 247, w: 12, h: 18, box: 24 };
 
 /**
  * An LCD's content: text right-aligned in the window, with ghost segments behind and an
@@ -266,7 +324,7 @@ function centerInfo(clock, range, odo, opts) {
 }
 
 module.exports = {
-    CENTER, centerInfo,
+    CENTER, centerInfo, needleShader, needleShade, NEEDLE_RGB,
     Canvas, D, C, R_FACE, R_TICK, A0, A1, SUB, LCD, SEG, ILLUM, NEEDLE,
     angleOf, subAngleOf, pol, speedoFace, tachFace, needle, hub, segment, lcd,
 };

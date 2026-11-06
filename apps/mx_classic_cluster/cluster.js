@@ -102,7 +102,7 @@ class ClassicCluster {
 
     _connect() {
         const cr = this.cr = new ClusterRender(this.opts.app || 'mx_classic_cluster', this.opts.socket);
-        this.state = { target: 'connecting', reason: '', layers: {}, budget: '' };
+        this.state = { target: 'connecting', reason: '', layers: {}, why: {}, budget: '' };
         this.refs = {}; this.faceKey = '';
         this.lcdText = { speed: null, gear: null };
         this.segLit = [];
@@ -118,15 +118,20 @@ class ClassicCluster {
             const was = this.state.target;
             this.state.target = state; this.state.reason = reason || (holder && holder !== 'none' ? 'held by ' + holder : '');
             if (state !== was) this.log.info('panel ' + state + (this.state.reason ? ': ' + this.state.reason : ''));
-            if (state === 'shown' && was !== 'shown' && !this.sweptOnce) { this.sweptOnce = true; this.startSweep(); }
+            if (state === 'shown' && was !== 'shown' && !this.sweptOnce) { this.sweptOnce = true; this.startSweep(true); }
             if (this.opts.onTarget) this.opts.onTarget(state, holder, reason);
         });
         cr.on('layer', (ref, state, reason) => {
             this.state.layers[ref] = state;
+            this.state.why[ref] = reason || '';
             if (state === 'error') this.log.warn('layer ' + ref + ' refused: ' + (reason || ''));
         });
         cr.on('budget', (cap, max) => { this.state.budget = cap + '/' + max + ' KB/s'; });
-        cr.on('refused', (op, ref, reason) => this.log.warn('refused ' + op + ' ' + ref + ': ' + (reason || '')));
+        cr.on('refused', (op, ref, reason) => {
+            this.state.refused = (this.state.refused || 0) + 1;
+            this.state.lastRefused = op + ' ' + ((this.groups && this.groups[ref]) || ref) + ': ' + (reason || '');
+            this.log.warn('refused ' + op + ' ' + ref + ': ' + (reason || ''));
+        });
         this.build();
         cr.connect();
     }
@@ -143,7 +148,7 @@ class ClassicCluster {
     build() {
         const s = this.getSettings();
         const L = layout(s.dx, s.dy);
-        const key = JSON.stringify([s.units, s.illum, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop]);
+        const key = JSON.stringify([s.units, s.illum, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
         if (!this.cr || key === this.faceKey) return;
         const first = !this.faceKey;
         this.faceKey = key;
@@ -182,25 +187,41 @@ class ClassicCluster {
         this.lcdText = { speed: null, gear: null };
 
         // warm-up segments: one per 250 rpm over the 2500 rpm below the redline
+        // (each drawn already turned, so no layer here is turned by the renderer)
         R.segs = [];
         this.segRpm = [];
-        const seg = F.segment(true);
         const max = tachMax(s.redline);
         for (let v = s.redline - 2500; v < s.redline; v += 250) {
             const a = F.angleOf(v + 125, 0, max);
             const [x, y] = F.pol(L.tach.cx, L.tach.cy, F.SEG.r, a);
-            const ref = img({ z: 1, x: Math.round(x - F.SEG.w / 2), y: Math.round(y - F.SEG.h / 2), w: F.SEG.w, h: F.SEG.h,
-                rotate: a, sampling: 'bilinear', visible: false });
-            cr.pixels(ref, null, buf(seg));
+            const ref = img({ z: 1, x: Math.round(x - F.SEG.box / 2), y: Math.round(y - F.SEG.box / 2), w: F.SEG.box, h: F.SEG.box,
+                visible: false });
+            cr.pixels(ref, null, buf(F.segment(a)));
             R.segs.push(ref);
             this.segRpm.push(v);
         }
         this.segLit = R.segs.map(() => false);
 
         // needles: main 270 px tip, 62 px tail; small ones 66 / 16
-        const big = F.needle(270, 62, 15, true), small = F.needle(66, 16, 8, true);
+        const big = Object.assign(F.needle(270, 62, 15, true), { len: 270, tail: 62, wid: 15 });
+        const small = Object.assign(F.needle(66, 16, 8, true), { len: 66, tail: 16, wid: 8 });
         const hubBig = F.hub(36), hubSmall = F.hub(11);
+        // Two ways to draw a needle (setting "Needles"):
+        //   shader  an unturned quad over the needle's sweep; a fragment shader draws the needle at
+        //           the angle in the uniform u_a. Moving it sends a uniform.
+        //   image   a needle image turned by the renderer about its pivot (the layer's rotate).
+        this.mode = s.needles === 'image' ? 'image' : 'shader';
         const place = (n, cx, cy, z) => {
+            if (this.mode === 'shader') {
+                const reach = Math.ceil(Math.max(n.len, n.tail) + 10);
+                const box = Math.min(2 * reach, D);
+                const x = Math.max(0, Math.round(cx - box / 2)), y = Math.max(0, Math.round(cy - box / 2));
+                const w = Math.min(box, W - x), h = Math.min(box, H - y);
+                const sp = { w, h, px: cx - x, py: cy - y, len: n.len, tail: n.tail, wid: n.wid };
+                const ref = cr.effect({ target: TARGET, z, x, y, w, h, fs: F.needleShader(sp), contend: s.retake ? 1 : 0 });
+                cr.uniform(ref, 'u_a', [F.A0]);
+                return ref;
+            }
             const ref = img({ z, x: Math.round(cx - n.px), y: Math.round(cy - n.py), w: n.w, h: n.h,
                 px: n.px, py: n.py, rotate: F.A0, sampling: 'bilinear' });
             cr.pixels(ref, null, buf(n.cv));
@@ -221,15 +242,31 @@ class ClassicCluster {
         R.speedHub = cap(hubBig, L.speedo.cx, L.speedo.cy, 5);
         R.rpmHub = cap(hubBig, L.tach.cx, L.tach.cy, 5);
 
+        // which group each layer is in, for the app's diagnostics
+        this.groups = {};
+        const g = (name, refs) => refs.forEach((ref) => { if (ref) this.groups[ref] = name; });
+        g('background', [R.back]); g('centre', [R.center]); g('dials', [R.speedo, R.tach]);
+        g('lcds', [R.lcdSpeed, R.lcdGear]); g('segments', R.segs);
+        g('needles', [R.speed, R.rpm, R.fuel, R.oil]); g('hubs', [R.fuelHub, R.oilHub, R.speedHub, R.rpmHub]);
+        this.state.layers = {}; this.state.why = {};
+        this.sends = 0;
+
         Object.keys(this.needles).forEach((k) => { this.needles[k].sent = null; });
         this.log.info('faces drawn in ' + (Date.now() - t0) + ' ms');
     }
 
-    /** The needle sweep: to full scale and back, about 1.6 s. */
-    startSweep() {
-        if (!this.getSettings().sweep) return;
-        if (!this.enabled || (this.values.live && this.values.speed > 1)) return;     // never while moving
+    /**
+     * The needle sweep: to full scale and back, about 1.6 s. auto: the one at start, which the
+     * "Needle sweep at start" setting controls; the button's sweep runs whatever that setting.
+     * Returns why it did not run, or ''.
+     */
+    startSweep(auto) {
+        if (auto && !this.getSettings().sweep) return 'off in the settings';
+        if (!this.enabled || !this.cr) return 'the cluster is off';
+        if (this.values.live && this.values.speed > 1) return 'not while moving';     // never while moving
         this.sweep = { t0: Date.now() };
+        this.log.info('needle sweep');
+        return '';
     }
 
     /**
@@ -257,7 +294,10 @@ class ClassicCluster {
         const send = (k, ang) => {
             if (n[k].sent !== null && Math.abs(n[k].sent - ang) < MIN_STEP_DEG) return;
             n[k].sent = ang;
-            this.cr.set(this.refs[k], { rotate: Math.round(ang * 100) / 100 });
+            this.sends++;
+            const deg = Math.round(ang * 100) / 100;
+            if (this.mode === 'shader') this.cr.uniform(this.refs[k], 'u_a', [deg]);
+            else this.cr.set(this.refs[k], { rotate: deg });
         };
         send('speed', lerp(F.A0, F.A1, n.speed.v));
         send('rpm', lerp(F.A0, F.A1, n.rpm.v));
@@ -292,9 +332,22 @@ class ClassicCluster {
         this.cr.pixels(ref, null, buf(F.lcd(text, unit, { illum: s.illum, center })));
     }
 
+    /**
+     * The cluster's state for the app's screen: the panel, and per group of layers how many are in
+     * each state cluster-render reported (shown, waiting, stalled, hidden, error) with a reason.
+     */
     status() {
-        const shown = Object.keys(this.state.layers).filter((k) => this.state.layers[k] === 'shown').length;
-        return { target: this.state.target, reason: this.state.reason, shown, budget: this.state.budget, backend: this.cr ? this.cr.backend : '' };
+        const st = this.state, groups = {};
+        Object.keys(this.groups || {}).forEach((ref) => {
+            const name = this.groups[ref], state = st.layers[ref] || 'no report';
+            const g = groups[name] = groups[name] || { counts: {}, why: '' };
+            g.counts[state] = (g.counts[state] || 0) + 1;
+            if (state !== 'shown' && st.why && st.why[ref] && !g.why) g.why = st.why[ref];
+        });
+        const shown = Object.keys(st.layers).filter((k) => st.layers[k] === 'shown').length;
+        return { target: st.target, reason: st.reason, shown, budget: st.budget, backend: this.cr ? this.cr.backend : '',
+            groups, mode: this.mode, sends: this.sends || 0, sweeping: !!this.sweep,
+            refused: st.refused || 0, lastRefused: st.lastRefused || '' };
     }
 }
 

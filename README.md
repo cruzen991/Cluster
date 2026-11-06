@@ -86,7 +86,11 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which othe
 
 Show on the cluster; stock cluster hidden (default) or showing between the dials; mph or km/h; °F or °C; classic orange or white dial lighting; redline (7000 for a B58); the needle
 sweep at start; dials only or black sides; tank size (59 l for a G20 M340i); moving the dials apart, together, up or
-down; retry after BMW pop-ups (off); demo data on the cluster (never, by default).
+down; needles drawn by a shader (default) or as turned images; retry after BMW pop-ups (off); demo data on the
+cluster (never, by default).
+
+The *Needle sweep* button sweeps whatever the *Needle sweep at start* setting says (that setting only controls the
+automatic one); the app's screen says when it runs, or why it did not (the cluster off, or the car moving).
 
 The app's own screen in the head unit always uses the HMI's own image (software rendering), never the Store's GPU
 renderer. Version 0.1.0 let the kit switch to the GPU renderer once it found it running, which put a blank surface
@@ -135,11 +139,25 @@ then `node kit/tools/preview.js dist/mx_classic_cluster preview wait=8 render`.
 
 ## How the cluster is drawn
 
-Every part is an image layer. The faces are drawn once (about 3.8 MB uploaded at start, within cluster-render's
-shared link budget); the needles are drawn once and turned by the renderer with the layer's `rotate`, so moving a
-needle sends a few bytes, not pixels. Only the two LCD windows are redrawn, at most 5 times a second, about 200 KB/s
-while the speed changes. No shaders, meshes or renderer animations are used, as those are the parts of cluster-render
-least checked on the car.
+The faces, LCDs, centre panel, warm-up segments and hubs are image layers that are never turned: the kind of layer
+the Waze map, the one thing checked on cars, also is. The faces are drawn once (about 3.8 MB uploaded at start,
+within cluster-render's shared link budget); only the LCD windows and the centre panel are redrawn, about 200 KB/s
+while the speed changes.
+
+The needles, two ways (setting *Needles drawn by*):
+
+- **Shader (default):** each needle is an unturned quad over its sweep; a fragment shader draws it at the angle in
+  one uniform, so moving a needle sends a few bytes.
+- **Turned images:** a needle image the renderer turns about its pivot (the layer's `rotate`).
+
+In version 0.2.0 the needles were turned images only, and on the first car test they did not show; turned layers are
+checked in cluster-render's emulator, not on a car's cluster. Neither way is checked on a car yet. If one shows no
+needles, try the other.
+
+**Diagnostics.** With the cluster on, the bottom of the app's screen lists, per group of layers (background, centre,
+dials, lcds, segments, needles, hubs), what cluster-render reports for them (shown, waiting, stalled, hidden, error)
+and why, how many needle moves were sent, and any message the renderer refused. A photo of that screen says where a
+problem is.
 
 ## Licences
 

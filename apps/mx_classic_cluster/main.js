@@ -40,6 +40,7 @@ mgu.run({
             dy: Number(settings.get('dy')) || 0,
             demo: settings.get('demo') === 'on',
             retake: settings.get('retake') === true,
+            needles: settings.get('needles') === 'image' ? 'image' : 'shader',
         });
 
         // fuel: litres in the tank from the cluster's own range / tank status
@@ -144,13 +145,29 @@ mgu.run({
             cv.text(v.live ? 'Live car data' : (s.demo ? 'Demo data' : 'No car data: needles parked'), mid, 302, 24, t.dim, { align: 'center', literal: true });
             cv.text(v.speedText + ' ' + (s.units === 'kmh' ? 'km/h' : 'mph') + '   ' + Math.round(v.rpm) + ' rpm   ' + v.gearText,
                 mid, 350, 32, t.text, { align: 'center', literal: true });
-            if (v.oilC !== null) cv.text('Oil ' + fmtTemp(v.oilC, s.tempUnit), mid, 398, 24, t.dim, { align: 'center', literal: true });
-            if (st.budget) cv.text('Link ' + st.budget, mid, 440, 18, t.dim, { align: 'center', literal: true });
+            const extra = [v.oilC !== null ? 'Oil ' + fmtTemp(v.oilC, s.tempUnit) : '', st.budget ? 'Link ' + st.budget : ''].filter(Boolean).join('   ');
+            if (extra) cv.text(extra, mid, 388, 22, t.dim, { align: 'center', literal: true });
+            // diagnostics: what cluster-render says about each group of layers (a photo of this helps)
+            if (s.on) {
+                const groups = Object.keys(st.groups).map((n) => {
+                    const g = st.groups[n];
+                    return n + ' ' + Object.keys(g.counts).map((k) => g.counts[k] + ' ' + k).join('/') + (g.why ? ' (' + g.why + ')' : '');
+                }).join(' | ');
+                const sweepNote = sweepMsg && Date.now() - sweepMsg.at < 4000 ? '  Sweep: ' + sweepMsg.text : (st.sweeping ? '  Sweeping' : '');
+                const lines = ['Needles: ' + st.mode + ', ' + st.sends + ' moves sent' + sweepNote]
+                    .concat(wrap(groups, 74))
+                    .concat(st.refused ? wrap('Refused ' + st.refused + ': ' + st.lastRefused, 74) : []);
+                lines.slice(0, 5).forEach((line, i) => cv.text(line, mid, 420 + i * 22, 17, t.dim, { align: 'center', literal: true }));
+            }
             return ui.image('MAIN_GFX', cv);
         });
         ui.onClick('BTN_TOGGLE', () => settings.set('on', !S().on));
         process.on('exit', () => cluster.stop());
-        ui.onClick('BTN_SWEEP', () => cluster.startSweep());
+        let sweepMsg = null;
+        ui.onClick('BTN_SWEEP', () => {
+            const why = cluster.startSweep(false);
+            sweepMsg = { at: Date.now(), text: why ? 'not run: ' + why : 'running' };
+        });
         log.info('classic cluster started');
     },
 });

@@ -79,3 +79,15 @@ console.log('classic cluster self-check ok');
     assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
     console.log('screen and backdrop self-check ok');
 }
+
+/* the shader needle and its JavaScript twin agree on where the needle is */
+{
+    const sp = { w: 560, h: 560, px: 280, py: 280, len: 270, tail: 62, wid: 15 };
+    const fs = F.needleShader(sp);
+    assert(/^#version 100\n/.test(fs) && /uniform float u_a;/.test(fs) && !/\$\{|NaN|undefined/.test(fs));
+    assert(F.needleShade(sp, 280.5, 100, 0)[3] > 250, 'pointing up at 0 degrees');
+    assert(F.needleShade(sp, 280.5 + 180, 280.5, 90)[3] > 250, 'pointing right at 90 degrees (clockwise)');
+    assert(F.needleShade(sp, 280.5 - 180, 280.5, 90)[3] < 1, 'nothing on the other side');
+    assert.strictEqual(F.segment(30).w, F.SEG.box);
+    console.log('needle self-check ok');
+}
