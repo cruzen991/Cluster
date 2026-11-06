@@ -1,0 +1,62 @@
+{
+  "id": "mx_classic_cluster",
+  "title": "Classic Cluster",
+  "description": "Classic BMW round dials with orange needles on the instrument cluster",
+  "version": "0.1.0",
+  "vendor": "custom",
+  "loggingId": "OAC7",
+  "iconGlyph": "gauge",
+  "signals": {
+    "de.bmw.infotainment.vehicle.CDS": {
+      "statusEngineSpeed2": "rs",
+      "statusEngineTemperature": "rs"
+    },
+    "de.bmw.infotainment.vehicle.Vehicle2": {
+      "statusCarSpeed2": "rs"
+    },
+    "de.bmw.infrastructure.VehicleInformation": {
+      "statusGearboxDrive": "s",
+      "DataPowerTrain2": "s"
+    },
+    "de.bmw.infotainment.KombiIF": {
+      "statusRangeTankStatus": "rs"
+    }
+  },
+  "screens": [
+    {
+      "name": "MAIN",
+      "kind": "canvas",
+      "title": "Classic Cluster",
+      "buttons": [
+        ["BTN_TOGGLE", "Cluster on / off"],
+        ["BTN_SWEEP", "Needle sweep"],
+        ["BTN_SETTINGS", "Settings"]
+      ]
+    }
+  ],
+  "settings": [
+    {"key": "on", "label": "Show on the cluster", "type": "bool", "default": true},
+    {"key": "units", "label": "Speed", "type": "choice", "default": "mph",
+     "options": [["mph", "mph (km/h inner scale)"], ["kmh", "km/h (mph inner scale)"]]},
+    {"key": "tempUnit", "label": "Oil temperature", "type": "choice", "default": "f",
+     "options": [["f", "Fahrenheit"], ["c", "Celsius"]]},
+    {"key": "illum", "label": "Dial lighting", "type": "choice", "default": "orange",
+     "options": [["orange", "Classic orange"], ["white", "White"]]},
+    {"key": "redline", "label": "Redline", "type": "number", "unit": "rpm", "default": 7000,
+     "steps": [5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500]},
+    {"key": "sweep", "label": "Needle sweep at start", "type": "bool", "default": true},
+    {"key": "backdrop", "label": "Background", "type": "choice", "default": "none",
+     "options": [["none", "Dials only"], ["sides", "Black sides (covers the stock gauges)"]]},
+    {"key": "tank", "label": "Fuel tank size", "type": "number", "unit": "l", "default": 59,
+     "steps": [40, 45, 50, 52, 55, 57, 59, 60, 63, 65, 68, 70, 74, 80]},
+    {"key": "dx", "label": "Dials apart", "type": "number", "unit": "px", "default": 0,
+     "steps": [-80, -60, -40, -20, 0, 20, 40, 60, 80]},
+    {"key": "dy", "label": "Dials up / down", "type": "number", "unit": "px", "default": 0,
+     "steps": [-30, -20, -10, 0, 10, 20, 30]},
+    {"key": "retake", "label": "Retry after BMW pop-ups (off: wait until the cluster is free)", "type": "bool", "default": false},
+    {"key": "demo", "label": "Demo data on the cluster", "type": "choice", "default": "off",
+     "options": [["off", "Never"], ["on", "Always (parked testing only)"]]},
+    {"key": "theme", "label": "Colour theme", "type": "choice", "default": "amber",
+     "options": [["m_red", "M Red"], ["m_tricolour", "M Tricolour"], ["ice", "Ice White"], ["amber", "Night Amber"]]}
+  ]
+}
