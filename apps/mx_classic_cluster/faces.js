@@ -42,7 +42,7 @@ const STYLES = {
     sport: {
         needle: { core: '#ff2b2b', edge: '#c40f14', hi: '#ff9a9a', glow: [255, 30, 30, 40] },
         rgb: { core: [255, 43, 43], edge: [196, 15, 20], hi: [255, 154, 154], glow: [255, 30, 30] },
-        il: { mark: '#f2f2f2', num: '#f6f6f6', dim: '#8d939a', red: '#ff2a2a', lcd: '#f6f6f6', ghost: [255, 255, 255, 18] },
+        il: { mark: '#ffffff', num: '#ffffff', dim: '#8d939a', red: '#ff2a2a', lcd: '#ffffff', ghost: [255, 255, 255, 18] },
     },
 };
 const style = (name) => STYLES[name] || STYLES.classic;
@@ -357,7 +357,7 @@ function lcd(text, unit, opts) {
         // no window: large white figures straight on the face
         cv.clear('#050506');
         const right = centre ? LCD.w / 2 : unit ? LCD.w - 62 : LCD.w - 14;
-        cv.text(text, right, 48, 52, il.lcd, { font: 'num', align: centre ? 'center' : 'right', literal: true });
+        cv.text(text, right, 48, 52, il.lcd, { font: sport ? 'bold' : 'num', align: centre ? 'center' : 'right', literal: true });
         if (unit) cv.text(unit, LCD.w - 10, 46, 20, il.dim, { font: 'bold', align: 'right', literal: true });
         return cv;
     }
@@ -429,7 +429,7 @@ function speedoFaceSport(opts) {
     sportTicks(cv, max, mph ? 5 : 10, mph ? 10 : 20, step, null, il);
     for (let v = 0; v <= max; v += step) {
         const [x, y] = pol(C, C, 232, angleOf(v, 0, max));
-        cv.text(String(v), x, y + 14, mph ? 40 : 32, il.num, { font: 'light', align: 'center', literal: true });
+        cv.text(String(v), x, y + 16, mph ? 44 : 34, il.num, { font: 'bold', align: 'center', literal: true });
     }
     cv.text(mph ? 'mph' : 'km/h', C, C - 96, 24, il.dim, { font: 'bold', align: 'center', literal: true, spacing: 2 });
     subDial(cv, il, [[0, '0'], [0.5, '1/2'], [1, '1/1']], 0, 0.125, pumpIcon);
@@ -444,7 +444,7 @@ function tachFaceSport(opts) {
     sportTicks(cv, max, 250, 500, 1000, red, il);
     for (let v = 0; v <= max; v += 1000) {
         const [x, y] = pol(C, C, 206, angleOf(v, 0, max));
-        cv.text(String(v / 1000), x, y + 22, 64, v >= red ? il.red : il.num, { font: 'light', align: 'center', literal: true });
+        cv.text(String(v / 1000), x, y + 23, 64, v >= red ? il.red : il.num, { font: 'bold', align: 'center', literal: true });
     }
     cv.text('rpm x 1000', C, C - 96, 22, il.dim, { font: 'bold', align: 'center', literal: true, spacing: 2 });
     const f = opts.tempUnit === 'f';
@@ -459,7 +459,7 @@ function centerSpeed(text, unit, opts) {
     const sport = opts && opts.style === 'sport';
     const il = sport ? STYLES.sport.il : ILLUM[(opts && opts.illum) || 'orange'] || ILLUM.orange;
     const cv = new Canvas(CSPEED.w, CSPEED.h).clear(sport ? '#050506' : '#0d0b08');
-    cv.text(text, CSPEED.w / 2 + 10, 70, 64, il.lcd, { font: 'num', align: 'right', literal: true });
+    cv.text(text, CSPEED.w / 2 + 10, 70, 64, il.lcd, { font: sport ? 'bold' : 'num', align: 'right', literal: true });
     cv.text(unit, CSPEED.w / 2 + 22, 68, 24, il.dim, { font: 'bold', literal: true });
     return cv;
 }

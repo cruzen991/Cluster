@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Classic BMW round dials with orange needles on the instrument cluster",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
