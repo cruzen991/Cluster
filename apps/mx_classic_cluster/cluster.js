@@ -37,6 +37,7 @@ const LCD_MIN_MS = 200;            // an LCD's text is redrawn at most 5 times a
 const REDRAW_FPS = 5;              // redrawn mode: dial updates a second at most (each costs CPU)
 const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
 const MAX_LAYERS = 8;              // cluster-render's per-client limit
+const SLOW_MS = 3000;              // arc style: oil, coolant, intake and outside temperatures change slowly: shown values refresh every 3 s
 const PANEL_MS = 250;              // arc style: readouts redrawn at most 4 times a second (big figures cost upload)
 
 /* where the two dials sit on the panel; dx moves both outwards (+) or inwards (-) */
@@ -257,7 +258,7 @@ class ClassicCluster {
             R[k] = img(Object.assign({ z: k === 'centre' ? 3 : 1 }, L[k]));
             this.panels[k] = { ref: R[k], p: new A.Panel(L[k].w, L[k].h) };
         }
-        this.panelAt = 0;
+        this.panelAt = 0; this.slow = null;
 
         const count = Object.keys(R).length;
         if (count > MAX_LAYERS) this.log.warn(count + ' layers asked for, more than cluster-render allows one app (' + MAX_LAYERS + ')');
@@ -441,7 +442,10 @@ class ClassicCluster {
         }
         if (!this.panels || now - this.panelAt < PANEL_MS) return;
         this.panelAt = now;
-        const t = arcTexts(s, v, this.sweep);
+        // the temperatures are taken every SLOW_MS only: a value flickering between two degrees would
+        // otherwise redraw and upload its big figures several times a second for nothing
+        if (!this.slow || now - this.slow.at >= SLOW_MS) this.slow = { at: now, oilC: v.oilC, coolC: v.coolC, iatC: v.iatC, outsideC: v.outsideC };
+        const t = arcTexts(s, Object.assign({}, v, this.slow), this.sweep);
         A.drawCentre(this.panels.centre.p, t.centre);
         A.drawLeft(this.panels.left.p, t.left);
         A.drawRight(this.panels.right.p, t.right);
