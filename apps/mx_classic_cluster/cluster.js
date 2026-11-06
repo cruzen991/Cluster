@@ -179,7 +179,7 @@ class ClassicCluster {
                 const art = this.arcArt(o);
                 later(() => {
                     if (!live()) return;
-                    const bk = s.arcBg === 'graphite' ? 'graphite' : 'grid';
+                    const bk = A.BACKGROUNDS[s.arcBg] ? s.arcBg : 'grid';
                     if (!art.bg || art.bgKind !== bk) { art.bg = A.background(bk); art.bgKind = bk; }
                     later(() => { if (live()) this._arcLayers(s, o, art, t0); });
                 });

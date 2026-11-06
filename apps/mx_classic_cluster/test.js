@@ -236,7 +236,16 @@ for (const st of ['tech']) {
     const at = (x, y) => gr.d[(y * A.BG_W + x) * 4];
     assert(gOpaque && at(480, 20) > at(5, 20) && at(480, 330) > at(480, 200) && at(480, 330) > 50, 'graphite: lighter middle, red pool under the dial');
     const bg2 = require('./app.json').settings.find((x) => x.key === 'arcBg');
-    assert(bg2 && bg2.default === 'grid' && bg2.options.map((o) => o[0]).join() === 'grid,graphite');
+    assert(bg2 && bg2.default === 'grid' && bg2.options.map((o) => o[0]).join() === 'grid,graphite,dusk,twin');
+    assert.deepStrictEqual(Object.keys(A.BACKGROUNDS), bg2.options.map((o) => o[0]), 'a picture for every choice');
+    for (const k of ['dusk', 'twin']) {
+        const c = A.background(k), px = (x, y) => c.d[(y * A.BG_W + x) * 4];
+        let op = true;
+        for (let i = 3; i < c.d.length; i += 4) if (c.d[i] !== 255) op = false;
+        assert(op && c.d.length === A.BG_W * A.BG_H * 4, k + ' opaque, half size');
+        if (k === 'dusk') assert(px(480, 355) > 60 && px(480, 20) < 10, 'dusk: red at the bottom, black at the top');
+        else assert(px(150, 175) > 50 && px(810, 175) > 50 && px(480, 175) < 15, 'twin glow: red behind both sides, dark middle');
+    }
 }
 
 /* a bad sample never freezes a needle */

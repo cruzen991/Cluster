@@ -230,8 +230,38 @@ function graphiteBackground() {
     return cv;
 }
 
-/** The arc style's background by its setting: 'grid' (default) or 'graphite'. */
-function background(kind) { return kind === 'graphite' ? graphiteBackground() : gridBackground(); }
+/** A half-size background from a function of the pixel centre -> [r, g, b] (opaque). */
+function fieldBackground(fn) {
+    const cv = new Canvas(BG_W, BG_H), d = cv.d;
+    for (let y = 0; y < BG_H; y++) for (let x = 0; x < BG_W; x++) {
+        const c = fn(x + 0.5, y + 0.5), i = (y * BG_W + x) * 4;
+        d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+    }
+    return cv;
+}
+const smooth = (t) => { const u = t <= 0 ? 0 : t >= 1 ? 1 : t; return u * u * (3 - 2 * u); };
+
+/** "Dusk": a deep red rising from the bottom edge into black, strongest in the middle. */
+function duskBackground() {
+    const cx = BG_W / 2;
+    return fieldBackground((x, y) => {
+        const t = Math.pow(smooth((y - 150) / 210), 1.6) * (0.55 + 0.45 * smooth(1 - Math.abs(x - cx) / 700));
+        return [4 + 80 * t, 4 + 8 * t, 5 + 10 * t];
+    });
+}
+
+/** "Twin glow": a soft red light behind each side's readouts, the middle dark. */
+function twinGlowBackground() {
+    return fieldBackground((x, y) => {
+        let g = 0;
+        for (const gx of [150, 810]) g += Math.pow(smooth(1 - Math.hypot((x - gx) / 200, (y - 175) / 170)), 1.5);
+        return [5 + 60 * g, 5 + 7 * g, 6 + 7 * g];
+    });
+}
+
+/** The arc style's backgrounds by their setting's value; the first is the default. */
+const BACKGROUNDS = { grid: gridBackground, graphite: graphiteBackground, dusk: duskBackground, twin: twinGlowBackground };
+function background(kind) { return (BACKGROUNDS[kind] || gridBackground)(); }
 
 /**
  * The needle alone, pointing straight up, for the "rotating layer" mode: the renderer turns this
@@ -390,7 +420,7 @@ function bigText(cv, str, x, y, size, col) {
 }
 
 module.exports = {
-    bigText, needleSprite, gridBackground, graphiteBackground, background, BG_W, BG_H,
+    bigText, needleSprite, gridBackground, graphiteBackground, background, BACKGROUNDS, BG_W, BG_H,
     DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
 };

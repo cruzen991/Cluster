@@ -49,7 +49,7 @@ mgu.run({
             retake: settings.get('retake') === true,
             style: settings.get('style') === 'arc' ? 'arc' : 'tech',     // 'sport' / 'classic' saved by an older version: tech
             torqueUnit: settings.get('torqueUnit') === 'nm' ? 'nm' : 'lbft',
-            arcBg: settings.get('arcBg') === 'graphite' ? 'graphite' : 'grid',
+            arcBg: ['graphite', 'dusk', 'twin'].indexOf(settings.get('arcBg')) >= 0 ? settings.get('arcBg') : 'grid',
             shift: settings.get('shift') !== false,
             needles: ['shader', 'rotate'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'redraw',
         });
