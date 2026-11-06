@@ -180,6 +180,25 @@ The moving parts, two ways (setting *Needles drawn by*):
   driven by the app, not a shader clock. Not yet seen on a car: if it shows no needles, the app screen's *moving*
   line says what cluster-render reported.
 
+**Keeping the app responsive.** The app answers the iDrive screen on the same thread that draws the dials, so no
+step may block for long. 0.8.0 blocked for up to about 1 s on this PC (several seconds on the head unit) whenever the
+cluster turned on, and used about half the processor while the needles moved: the app took several tries to open,
+and the on/off button seemed to need several presses. From 0.9.0:
+
+- the redrawn mode's drawing does trig once per update instead of once per pixel and skips what a part cannot reach:
+  a dial's first picture 470 → 8 ms, an update 42 → 7 ms (this PC);
+- at most 5 updates a second per dial, none for a move under half a degree;
+- the faces are drawn on separate turns of the event loop and cached, so turning the cluster on again does not draw
+  them again;
+- the cluster starts 1.5 s after the app, so the app's own screen opens first;
+- the app's screen is status text, twice a second (0.8.0 drew two small moving dials four times a second, and every
+  changed frame is compressed in JavaScript);
+- on/off: one press is one change; presses within a second of the last are ignored, and the screen says *Turning
+  on...* at once.
+
+Measured with the needles moving, toggling on and off: the longest block 846 → about 90 ms, the app busy 50 % → about
+9 % of the time (this PC; expect a few times more on the head unit).
+
 The gear and speed windows are transparent apart from their figures (0.7.0's opaque box hid the needle at low rpm).
 
 The app's screen in the head unit shows *Layers: n of 8* and, per group (background, centre, dials, moving, lcds),

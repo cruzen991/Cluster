@@ -87,10 +87,16 @@ function blank(cv) {
     cv.arc(C, C, R_BEZEL - 3, R_BEZEL, 0, 360, '#111113');
     cv.arc(C, C, 0, R_FACE + 2, 0, 360, '#0a0a0b');
     // a faint lift towards the centre
-    for (let r = R_FACE; r > 40; r -= 6) {
-        const t = 1 - r / R_FACE;
-        cv.arc(C, C, 0, r, 0, 360, [24, 24, 26, Math.round(16 * t)]);
-    }
+    // (the same picture as stacking a disc every 6 px, but each pixel drawn once: one ring per
+    // step with the stack's combined opacity, which is much faster on the head unit)
+    const radii = [];
+    for (let r = R_FACE; r > 40; r -= 6) radii.push(r);
+    let keep = 1;
+    radii.forEach((r, k) => {
+        keep *= 1 - Math.round(16 * (1 - r / R_FACE)) / 255;
+        const inner = k + 1 < radii.length ? radii[k + 1] : 0;
+        cv.arc(C, C, inner, r, 0, 360, [24, 24, 26, Math.round((1 - keep) * 255)]);
+    });
     cv.arc(C, C, R_FACE - 2, R_FACE + 2, 0, 360, '#000000');
 }
 

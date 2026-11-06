@@ -198,6 +198,132 @@ function shade(spec, x, y, st) {
 }
 const lerp = (a, b, t) => a + (b - a) * t;
 
+/* ---------- the fast compositor (redrawn mode) ----------
+ * The same picture as shade(), written straight into an RGBA buffer: trig done once per state
+ * instead of once per pixel, each part skipped where it cannot reach, and no allocation per
+ * pixel. shade() stays the reference; test.js checks the two agree.
+ */
+let AR = 0, AG = 0, AB = 0, AA = 0;
+function ov(c, a) {
+    if (!(a > 0)) return;
+    if (a > 1) a = 1;
+    const k = 1 - a;
+    AR = c[0] * a + AR * k; AG = c[1] * a + AG * k; AB = c[2] * a + AB * k; AA = a + AA * k;
+}
+function hubPx(px, py, h, r) {
+    const d2 = px * px + py * py;
+    if (d2 > (r + 1) * (r + 1)) return;
+    const d = Math.sqrt(d2);
+    ov(h.fill, r + 0.5 - d);
+    ov(h.ring, Math.min(r + 0.5 - d, d - (r - h.rw) + 0.5));
+    if (h.r1 > 0) ov(h.c1, h.r1 + 0.5 - d);
+    if (h.r2 > 0) ov(h.c2, h.r2 + 0.5 - d);
+}
+
+/**
+ * Composite face + moving parts at state st into `live` (both RGBA, spec.w wide) over the given
+ * rectangles; pixels with nothing on them are copied from the face.
+ */
+function compose(spec, st, face, live, rects) {
+    const m = spec.main, R = spec.ring, L = spec.lights, H = spec.hub, SH = spec.subHub;
+    const W = spec.w, cx = spec.cx, cy = spec.cy;
+    const ra = st.a * RAD, ca = Math.cos(ra), sa = Math.sin(ra);
+    const reachM = (m.len + 20) * (m.len + 20);
+    const hollow = m.shape === 'hollow';
+    let e1, e2;
+    if (hollow) { const k = kite(m); e1 = edge(k.T, k.R1); e2 = edge(k.R1, k.R2); }
+    const coreHi = m.col.core;
+    const subs = (spec.subs || []).map((s) => {
+        const ang = (s.u === 'w' ? st.c : st.b) * RAD;
+        const reach = Math.max(s.len, s.tail) + 10;
+        return { s, c: Math.cos(ang), n: Math.sin(ang), reach2: reach * reach, hr: s.hr || (SH && SH.r) };
+    });
+    const ringIn = R ? Math.max(0, R.r - R.w / 2 - 1) ** 2 : 0, ringOut = R ? (R.r + R.w / 2 + 1) ** 2 : -1;
+    const litTo = R ? Math.min(st.a, R.a1) : 0;
+    const lIn = L ? Math.max(0, L.r - L.w / 2 - 1) ** 2 : 0, lOut = L ? (L.r + L.w / 2 + 1) ** 2 : -1;
+    const lStep = L ? (L.a1 - L.a0) / L.n : 0;
+    const flash = L && st.lv > L.n + 0.5, flashOn = flash && st.lv < L.n + 1.5;
+    const hubR2 = (H.r + 1) * (H.r + 1);
+
+    for (const q of rects) {
+        for (let y = q.y; y < q.y + q.h; y++) {
+            let i = (y * W + q.x) * 4;
+            const py = y + 0.5 - cy;
+            for (let x = q.x; x < q.x + q.w; x++, i += 4) {
+                const px = x + 0.5 - cx, r2 = px * px + py * py;
+                AR = AG = AB = AA = 0;
+                if (r2 >= ringIn && r2 <= ringOut) {
+                    const rr = Math.sqrt(r2), th = Math.atan2(px, -py) / RAD;
+                    const band = cl(R.w / 2 + 0.5 - Math.abs(rr - R.r));
+                    const lit = cl((litTo - th) * RAD * R.r + 0.5) * cl((th - R.a0) * RAD * R.r + 0.5);
+                    ov(th > R.aRed ? R.red : R.lit, band * lit);
+                }
+                if (r2 >= lIn && r2 <= lOut) {
+                    const rr = Math.sqrt(r2), th = Math.atan2(px, -py) / RAD;
+                    if (th > L.a0 && th < L.a1) {
+                        const u = (th - L.a0) / lStep, k = Math.floor(u);
+                        const e = Math.min(u - k, k + 1 - u) * lStep * RAD * L.r - L.gap * RAD * L.r;
+                        let a = cl(L.w / 2 + 0.5 - Math.abs(rr - L.r)) * cl(e + 0.5);
+                        let c = k < L.green ? L.cGreen : k < L.yellow ? L.cYellow : L.cRed;
+                        if (flash) c = flashOn ? L.cRed : L.cDim;
+                        else if (k + 0.5 > st.lv) a = 0;
+                        ov(c, a);
+                    }
+                }
+                for (let j = 0; j < subs.length; j++) {
+                    const S = subs[j], s = S.s, sx = x + 0.5 - s.cx, sy = y + 0.5 - s.cy;
+                    if (sx * sx + sy * sy > S.reach2) continue;
+                    const qx = S.c * sx + S.n * sy, qy = S.c * sy - S.n * sx;
+                    const hw = qy <= 0 ? lerp(s.wid * 0.14, s.wid * 0.5, cl((qy + s.len) / s.len)) : lerp(s.wid * 0.5, s.wid * 0.7, cl(qy / s.tail));
+                    const d = Math.max(Math.abs(qx) - hw, Math.max(-s.len - qy, qy - s.tail));
+                    if (d < 8) { ov(m.col.glow, (1 - sm(0, 6, d)) * 0.16); ov(m.col.edge, 0.5 - d); ov(m.col.core, -0.7 - d); }
+                    if (SH) hubPx(sx, sy, SH, S.hr);
+                }
+                if (r2 <= reachM) {
+                    const qx = ca * px + sa * py, qy = ca * py - sa * px;
+                    if (hollow) {
+                        const hx = Math.abs(qx);
+                        const d = Math.max(Math.max(e1.nx * hx + e1.ny * qy - e1.c, e2.nx * hx + e2.ny * qy - e2.c), Math.max(qy - m.tail, -(m.len + 3) - qy));
+                        if (d < 16) {
+                            ov(m.col.glow, m.glowA * Math.exp(-Math.max(d, 0) / m.glowR) * (d >= -m.ow ? 1 : 0) * (1 - sm(10, 16, d)));
+                            ov(m.col.fill, m.fillA * cl(0.5 - d));
+                            ov(m.col.edge, m.ow / 2 + 0.5 - Math.abs(d + m.ow / 2));
+                        }
+                    } else {
+                        const hw = qy <= 0 ? lerp(m.wid * 0.14, m.wid * 0.5, cl((qy + m.len) / m.len)) : lerp(m.wid * 0.5, m.wid * 0.7, cl(qy / m.tail));
+                        const d = Math.max(Math.abs(qx) - hw, Math.max(-m.len - qy, qy - m.tail));
+                        if (d < 8) {
+                            ov(m.col.glow, (1 - sm(0, 7, d)) * 0.16);
+                            ov(m.col.edge, 0.5 - d);
+                            const spine = (1 - sm(0.6, 1.6, Math.abs(qx))) * (qy >= -(m.len - 4) ? 1 : 0) * (qy <= -Math.round(m.len * 0.15) ? 1 : 0);
+                            const a = -0.7 - d;
+                            if (a > 0) { SPINE[0] = lerp(coreHi[0], m.col.hi[0], spine); SPINE[1] = lerp(coreHi[1], m.col.hi[1], spine); SPINE[2] = lerp(coreHi[2], m.col.hi[2], spine); ov(SPINE, a); }
+                        }
+                    }
+                }
+                if (r2 <= hubR2) hubPx(px, py, H, H.r);
+                if (AA <= 0) { live[i] = face[i]; live[i + 1] = face[i + 1]; live[i + 2] = face[i + 2]; live[i + 3] = face[i + 3]; continue; }
+                const fr = AR / AA, fg = AG / AA, fb = AB / AA;
+                const ba = face[i + 3] / 255, oa = AA + ba * (1 - AA), k = ba * (1 - AA);
+                live[i] = Math.round((fr * AA + face[i] * k) / oa);
+                live[i + 1] = Math.round((fg * AA + face[i + 1] * k) / oa);
+                live[i + 2] = Math.round((fb * AA + face[i + 2] * k) / oa);
+                live[i + 3] = Math.round(oa * 255);
+            }
+        }
+    }
+}
+const SPINE = [0, 0, 0];
+
+/** Every rectangle the moving parts can cover at state st (for the first picture). */
+function allRects(spec, st) {
+    let r = needleRects(spec, st.a, 8);
+    for (const s of spec.subs || []) r = r.concat(subRects(s, s.u === 'w' ? st.c : st.b));
+    if (spec.ring && st.a > spec.ring.a0) r = r.concat(sectorRects(spec.cx, spec.cy, spec.ring.r, spec.ring.w, spec.ring.a0, Math.min(st.a, spec.ring.a1)));
+    if (spec.lights && st.lv > 0) r = r.concat(sectorRects(spec.cx, spec.cy, spec.lights.r, spec.lights.w, spec.lights.a0, spec.lights.a1));
+    return clip(r, spec.w, spec.h);
+}
+
 /* ---------- where a state change can change pixels (for the redrawn mode) ---------- */
 
 /** Rectangles (face pixels, unclipped) covering the main needle at angle a: `n` pieces. */
@@ -306,4 +432,4 @@ function clipMerge(rs, W, H) {
     return r;
 }
 
-module.exports = { shader, shade, dirty, clipMerge, fewer, MAX_RECTS, needleRects, sectorRects, FLASH_HZ };
+module.exports = { shader, shade, compose, allRects, dirty, clipMerge, fewer, MAX_RECTS, needleRects, sectorRects, FLASH_HZ };

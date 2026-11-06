@@ -22,6 +22,8 @@ const { Guard } = require('./guard');
 
 const W = 1600, H = 520;
 const STALE_MS = 1500;
+const START_DELAY_MS = 1500;       // the cluster starts this long after the app
+const TOGGLE_MS = 1000;            // presses of on / off closer than this are one press
 const KOMBI = 'de.bmw.infotainment.KombiIF';
 const FES = 'de.bmw.infotainment.drivingexcitement.FES';
 const { modeOf, boostPsiOf } = require('./modes');
@@ -101,8 +103,11 @@ mgu.run({
             if (S().on) settings.set('on', false);
         }
         cluster.start();
-        apply();
+        // the cluster starts a moment after the app, so the app's own screen opens first
+        let started = false, toggling = null, sweepMsg = null;
+        setTimeout(() => { started = true; apply(); }, START_DELAY_MS);
         settings.onChange((key, value) => {
+            if (!started) return;                 // picked up when the cluster starts
             const s = S();
             if (key === 'redline') car.setRedline(s.redline);
             if (key === 'on' && value === true) { tripped = ''; guard.retry(); }
@@ -133,33 +138,18 @@ mgu.run({
         };
         setInterval(() => cluster.update(read()), 1000 / 30);
 
-        /* ---------- the head unit screen: a small copy of the dials and the status ---------- */
-        let mini = null, miniKey = '';
-        const miniFaces = () => {
-            const s = S(), key = JSON.stringify([s.style, s.units, s.illum, s.redline, s.tempUnit]);
-            if (key === miniKey) return mini;
-            miniKey = key;
-            const sp = F.speedoFace({ style: s.style, units: s.units, illum: s.illum });
-            const tc = F.tachFace({ style: s.style, illum: s.illum, redline: s.redline, max: tachMax(s.redline), tempUnit: s.tempUnit });
-            const shrink = (src) => { const c = new Canvas(400, 400); c.drawImage(src.d, src.w, src.h, 0, 0, 400, 400); return c; };
-            mini = { sp: shrink(sp), tc: shrink(tc) };
-            return mini;
-        };
-        const needleLine = (cv, cx, cy, ang, len, col) => {
-            const a = ang * Math.PI / 180;
-            cv.line(cx, cy, cx + Math.sin(a) * len, cy - Math.cos(a) * len, 5, col);
-            cv.circle(cx, cy, 16, '#1a1a1b');
-        };
-        ctx.loop('MAIN', 4, () => {
-            const t = ctx.theme(), s = S(), v = read(), st = cluster.status(), m = miniFaces();
+        /* ---------- the head unit screen: the status, as text ----------
+         * Twice a second, and a frame that has not changed is not sent again (the kit compares
+         * pixels), so with steady values the app does almost nothing here. 0.8.0 drew two small
+         * moving dials here four times a second: every frame changed and was re-encoded. */
+        ctx.loop('MAIN', 2, () => {
+            const t = ctx.theme(), s = S(), v = read(), st = cluster.status();
             const cv = new Canvas(W, H).clear(t.bg);
-            const k = 400 / F.D;
-            cv.blit(m.sp, 40, 60); cv.blit(m.tc, W - 440, 60);
-            needleLine(cv, 240, 260, lerp(F.A0, F.A1, clamp01(v.speed / (s.units === 'kmh' ? 260 : 160))), 270 * k, F.style(s.style).needle.core);
-            needleLine(cv, W - 240, 260, lerp(F.A0, F.A1, clamp01(v.rpm / tachMax(s.redline))), 270 * k, F.style(s.style).needle.core);
             const mid = W / 2, col = st.target === 'shown' ? '#2fd27a' : st.target === 'idle' && !s.on ? t.dim : '#ffb020';
             cv.text('Classic Cluster', mid, 110, 44, t.text, { font: 'bold', align: 'center', literal: true });
-            cv.text(!s.on ? (tripped ? 'Off for safety' : 'Off: stock cluster') : label(st.target), mid, 190, 44, col, { font: 'bold', align: 'center', literal: true });
+            const busy = toggling && Date.now() - toggling.at < TOGGLE_MS;
+            cv.text(busy ? (toggling.on ? 'Turning on...' : 'Turning off...') : !s.on ? (tripped ? 'Off for safety' : 'Off: stock cluster') : label(st.target),
+                mid, 190, 44, busy ? t.text : col, { font: 'bold', align: 'center', literal: true });
             const why = !s.on ? (tripped ? 'Turned itself off: ' + tripped : 'Press "Cluster on / off" to show the dials') : st.reason;
             if (why) wrap(why, 60).slice(0, 2).forEach((line, i) => cv.text(line, mid, 236 + i * 28, 22, t.dim, { align: 'center', literal: true }));
             cv.text(v.live ? 'Live car data' : (s.demo ? 'Demo data' : 'No car data: needles parked'), mid, 302, 24, t.dim, { align: 'center', literal: true });
@@ -175,16 +165,23 @@ mgu.run({
                     return n + ' ' + Object.keys(g.counts).map((k) => g.counts[k] + ' ' + k).join('/') + (g.why ? ' (' + g.why + ')' : '');
                 }).join(' | ');
                 const sweepNote = sweepMsg && Date.now() - sweepMsg.at < 4000 ? '  Sweep: ' + sweepMsg.text : (st.sweeping ? '  Sweeping' : '');
-                const lines = ['Layers: ' + st.layers + ' of 8   Needles: ' + st.mode + ', ' + st.sends + ' updates sent' + sweepNote]
+                const lines = ['Layers: ' + st.layers + ' of 8   Needles: ' + st.mode + sweepNote]
                     .concat(wrap(groups, 74))
                     .concat(st.refused ? wrap('Refused ' + st.refused + ': ' + st.lastRefused, 74) : []);
                 lines.slice(0, 5).forEach((line, i) => cv.text(line, mid, 420 + i * 22, 17, t.dim, { align: 'center', literal: true }));
             }
             return ui.image('MAIN_GFX', cv);
         });
-        ui.onClick('BTN_TOGGLE', () => settings.set('on', !S().on));
+        // on / off: one press is one change. Presses within TOGGLE_MS of the last are ignored
+        // (0.8.0 blocked for seconds turning on, so a second press queued up and turned it off again)
+        ui.onClick('BTN_TOGGLE', () => {
+            const now = Date.now();
+            if (toggling && now - toggling.at < TOGGLE_MS) return;
+            toggling = { at: now, on: !S().on };
+            settings.set('on', toggling.on);
+            if (!started) { started = true; apply(); }
+        });
         process.on('exit', () => cluster.stop());
-        let sweepMsg = null;
         ui.onClick('BTN_SWEEP', () => {
             const why = cluster.startSweep(false);
             sweepMsg = { at: Date.now(), text: why ? 'not run: ' + why : 'running' };

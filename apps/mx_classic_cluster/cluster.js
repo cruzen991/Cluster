@@ -30,7 +30,8 @@ const W = 1920, H = 720;
 const FPS = 30;
 const MIN_STEP_DEG = 0.1;
 const LCD_MIN_MS = 200;            // an LCD's text is redrawn at most 5 times a second
-const REDRAW_FPS = 6;              // redrawn mode: dial updates a second at most (each costs CPU)
+const REDRAW_FPS = 5;              // redrawn mode: dial updates a second at most (each costs CPU)
+const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
 const MAX_LAYERS = 8;              // cluster-render's per-client limit
 
 /* where the two dials sit on the panel; dx moves both outwards (+) or inwards (-) */
@@ -108,7 +109,7 @@ class ClassicCluster {
     _connect() {
         const cr = this.cr = new ClusterRender(this.opts.app || 'mx_classic_cluster', this.opts.socket);
         this.state = { target: 'connecting', reason: '', layers: {}, why: {}, budget: '' };
-        this.refs = {}; this.faceKey = '';
+        this.refs = {}; this.faceKey = ''; this.dials = null;
         this.lcdText = { speed: null, gear: null };
         Object.keys(this.needles).forEach((k) => { this.needles[k].sent = null; });
         cr.on('ready', () => this.log.info('cluster-render: backend ' + cr.backend + ', targets ' + cr.targets));
@@ -143,30 +144,57 @@ class ClassicCluster {
     _disconnect() {
         if (this.cr) this.cr.close();
         this.cr = null;
-        this.refs = {}; this.faceKey = '';
+        this.refs = {}; this.faceKey = ''; this.dials = null;
         this.sweep = null;
         this.state = { target: 'off', reason: '', layers: {}, budget: '' };
     }
 
-    /** (Re)draw everything a setting changes. Layers keep their refs where they can. */
+    /**
+     * (Re)draw everything a setting changes. Never in one block: the two faces are drawn in turns of
+     * the event loop (or come from the cache), so the app keeps answering the HMI meanwhile; a newer
+     * build, or the cluster going off, abandons an older one.
+     */
     build() {
         const s = this.getSettings();
-        const L = layout(s.dx, s.dy);
         const key = JSON.stringify([s.shift, s.style, s.units, s.illum, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
         if (!this.cr || key === this.faceKey) return;
-        const first = !this.faceKey;
         this.faceKey = key;
+        const gen = this.buildGen = (this.buildGen || 0) + 1, cr = this.cr;
+        const live = () => this.buildGen === gen && this.cr === cr;
+        const centre = s.backdrop === 'full';
+        const faceOpts = { style: s.style, units: s.units, illum: s.illum, redline: s.redline, max: tachMax(s.redline), tempUnit: s.tempUnit };
         const t0 = Date.now();
+        later(() => {
+            if (!live()) return;
+            const speedo = this.face('speedo', Object.assign({ well: !centre }, faceOpts));
+            later(() => {
+                if (!live()) return;
+                const tach = this.face('tach', faceOpts);
+                later(() => { if (live()) this._layers(s, faceOpts, speedo, tach, t0); });
+            });
+        });
+    }
+
+    /** A face from the cache (the last few drawn), or drawn now. */
+    face(kind, o) {
+        const key = kind + JSON.stringify(o);
+        this.faces = this.faces || new Map();
+        let cv = this.faces.get(key);
+        if (!cv) {
+            cv = kind === 'speedo' ? F.speedoFace(o) : F.tachFace(o);
+            this.faces.set(key, cv);
+            while (this.faces.size > 4) this.faces.delete(this.faces.keys().next().value);
+        }
+        return cv;
+    }
+
+    _layers(s, faceOpts, speedo, tach, t0) {
+        const L = layout(s.dx, s.dy);
         const cr = this.cr, r = this.refs;
         const D = F.D, C = F.C;
-
         const centre = s.backdrop === 'full';
-        const max = tachMax(s.redline);
-        const faceOpts = { style: s.style, units: s.units, illum: s.illum, redline: s.redline, max, tempUnit: s.tempUnit };
-        const speedo = F.speedoFace(Object.assign({ well: !centre }, faceOpts));
-        const tach = F.tachFace(faceOpts);
 
-        if (!first) Object.keys(r).forEach((k) => cr.drop(r[k]));
+        Object.keys(r).forEach((k) => cr.drop(r[k]));
         this.refs = {};
         const R = this.refs;
         // contend 0 (the default): wait for the slot to be free and never retry against BMW's
@@ -197,9 +225,15 @@ class ClassicCluster {
                 cr.uniform(d.fx, 'u_v', [F.A0, F.SUB.a0, 0, F.SUB.a0]);
                 R[key + 'Fx'] = d.fx;
             } else {
+                // the first picture of each dial on a turn of its own
                 d.live = new F.Canvas(D, D);
-                d.live.d.set(face.d);
-                this.redrawDial(d, { a: F.A0, b: F.SUB.a0, c: F.SUB.a0, lv: 0 }, Date.now(), true);
+                d.pending = true;
+                const cur = this.cr;
+                later(() => {
+                    if (this.cr !== cur || !this.dials || this.dials[key] !== d) return;
+                    this.redrawDial(d, { a: F.A0, b: F.SUB.a0, c: F.SUB.a0, lv: 0 }, Date.now(), true);
+                    d.pending = false;
+                });
             }
             this.dials[key] = d;
         };
@@ -293,7 +327,7 @@ class ClassicCluster {
     /** A dial's moving parts to a new state: a uniform (shader), or changed rectangles (redrawn). */
     dialState(key, st, now) {
         const d = this.dials[key];
-        if (!d) return;
+        if (!d || d.pending) return;
         const o = d.st;
         const moved = !o || o.lv !== st.lv || ['a', 'b', 'c'].some((k) => Math.abs(o[k] - st[k]) >= MIN_STEP_DEG);
         if (!moved) return;
@@ -303,24 +337,16 @@ class ClassicCluster {
             return;
         }
         if (now - d.at < 1000 / REDRAW_FPS) return;
-        if (o.lv === st.lv && ['a', 'b', 'c'].every((k) => Math.abs(o[k] - st[k]) < 0.3)) return;
+        if (o.lv === st.lv && ['a', 'b', 'c'].every((k) => Math.abs(o[k] - st[k]) < REDRAW_MIN_DEG)) return;
         this.redrawDial(d, st, now, false);
     }
 
     /** Redrawn mode: recomposite face + moving parts in the changed rectangles and send those. */
     redrawDial(d, st, now, whole) {
-        const rects = whole ? [{ x: 0, y: 0, w: d.spec.w, h: d.spec.h }] : FX.dirty(d.spec, d.st, st);
-        const face = d.face.d, live = d.live.d, Wd = d.spec.w;
-        for (const q of rects) {
-            for (let y = q.y; y < q.y + q.h; y++) for (let x = q.x; x < q.x + q.w; x++) {
-                const i = (y * Wd + x) * 4;
-                const fx = FX.shade(d.spec, x + 0.5, y + 0.5, st);
-                const fa = fx[3] / 255, ba = face[i + 3] / 255, oa = fa + ba * (1 - fa);
-                if (oa <= 0) { live[i] = live[i + 1] = live[i + 2] = live[i + 3] = 0; continue; }
-                for (let c = 0; c < 3; c++) live[i + c] = Math.round((fx[c] * fa + face[i + c] * ba * (1 - fa)) / oa);
-                live[i + 3] = Math.round(oa * 255);
-            }
-        }
+        let rects;
+        if (whole) { d.live.d.set(d.face.d); rects = FX.allRects(d.spec, st); }
+        else rects = FX.dirty(d.spec, d.st, st);
+        FX.compose(d.spec, st, d.face.d, d.live.d, rects);
         d.st = st; d.at = now; this.sends++;
         if (whole) this.cr.pixels(d.ref, null, buf(d.live));
         else if (rects.length) this.cr.pixels(d.ref, rects, cropMany(d.live, rects));
@@ -361,6 +387,9 @@ function shiftLevel(rpm, redline) {
     if (rpm >= redline) return 11;
     return Math.max(0, Math.min(10, Math.floor((rpm - (redline - 2000)) / 200) + 1));
 }
+
+/** Run fn on a later turn of the event loop, so the HMI's events get in between. */
+const later = (fn) => setTimeout(fn, 0);
 
 /** The pixels of rectangle q of a canvas, row by row. */
 function crop(cv, q) { return cropMany(cv, [q]); }
