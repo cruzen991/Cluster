@@ -1,8 +1,8 @@
 {
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
-  "description": "Classic BMW round dials with orange needles on the instrument cluster",
-  "version": "0.10.3",
+  "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
+  "version": "0.11.0",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -83,14 +83,6 @@
         [
           "tech",
           "Tech (lit ring, shift lights)"
-        ],
-        [
-          "sport",
-          "Sport (white, red needles)"
-        ],
-        [
-          "classic",
-          "Classic (orange)"
         ]
       ]
     },
@@ -143,22 +135,6 @@
       ]
     },
     {
-      "key": "illum",
-      "label": "Dial lighting (classic style)",
-      "type": "choice",
-      "default": "orange",
-      "options": [
-        [
-          "orange",
-          "Classic orange"
-        ],
-        [
-          "white",
-          "White"
-        ]
-      ]
-    },
-    {
       "key": "redline",
       "label": "Redline",
       "type": "number",
@@ -183,7 +159,7 @@
     },
     {
       "key": "shift",
-      "label": "Shift lights (Tech style)",
+      "label": "Shift lights",
       "type": "bool",
       "default": true
     },

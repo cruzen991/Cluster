@@ -163,7 +163,7 @@ class ClassicCluster {
      */
     build() {
         const s = this.getSettings();
-        const key = JSON.stringify([s.shift, s.style, s.units, s.illum, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
+        const key = JSON.stringify([s.shift, s.style, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
         if (!this.cr || key === this.faceKey) return;
         this.faceKey = key;
         const gen = this.buildGen = (this.buildGen || 0) + 1, cr = this.cr;
@@ -173,16 +173,20 @@ class ClassicCluster {
             later(() => {
                 if (!live()) return;
                 const art = this.arcArt(o);
-                later(() => { if (live()) this._arcLayers(s, o, art, t0); });
+                later(() => {
+                    if (!live()) return;
+                    if (!art.bg) art.bg = A.gridBackground();
+                    later(() => { if (live()) this._arcLayers(s, o, art, t0); });
+                });
             });
             return;
         }
         const centre = s.backdrop === 'full';
-        const faceOpts = { style: s.style, units: s.units, illum: s.illum, redline: s.redline, max: tachMax(s.redline), tempUnit: s.tempUnit };
+        const faceOpts = { style: s.style, units: s.units, redline: s.redline, max: tachMax(s.redline), tempUnit: s.tempUnit };
         const t0 = Date.now();
         later(() => {
             if (!live()) return;
-            const speedo = this.face('speedo', Object.assign({ well: !centre }, faceOpts));
+            const speedo = this.face('speedo', faceOpts);
             later(() => {
                 if (!live()) return;
                 const tach = this.face('tach', faceOpts);
@@ -210,7 +214,7 @@ class ClassicCluster {
         this.faces = this.faces || new Map();
         let a = this.faces.get(key);
         if (!a) {
-            a = { base: A.arcFace(o), nums: A.numerals(o) };
+            a = { base: A.arcFace(o), nums: A.numerals(o), bg: null };      // bg: drawn on a turn of its own (build)
             this.faces.set(key, a);
             while (this.faces.size > 4) this.faces.delete(this.faces.keys().next().value);
         }
@@ -225,10 +229,10 @@ class ClassicCluster {
         const base = { target: TARGET, visible: true, contend: s.retake ? 1 : 0 };
         const img = (q) => cr.image(Object.assign({}, base, q));
         this.arc = true;
-        // the stock cluster is always hidden in this style: the readouts cover the whole panel
-        const black = new F.Canvas(16, 16).clear('#000000');
-        R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: 16, ih: 16 });
-        cr.pixels(R.back, null, buf(black));
+        // the stock cluster is always hidden in this style: the readouts cover the whole panel. The
+        // background is the horizon grid, drawn at half size and stretched (bilinear) by the renderer
+        R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: A.BG_W, ih: A.BG_H, sampling: 'bilinear' });
+        cr.pixels(R.back, null, buf(art.bg));
 
         this.mode = s.needles === 'redraw' ? 'redraw' : 'shader';
         const spec = A.arcFx(o);
@@ -399,11 +403,11 @@ class ClassicCluster {
         if (this.refs.lcdSpeed) this.lcd('speed', this.refs.lcdSpeed, this.sweep ? '888' : v.speedText, unit, now, s, false);
         this.lcd('gear', this.refs.lcdGear, this.sweep ? '88' : v.gearText, '', now, s, true);
         if (this.refs.center) {
-            const key = [v.rangeText, v.odoText, v.modeText, s.illum, s.style, unit].join('|');
+            const key = [v.rangeText, v.odoText, v.modeText, unit].join('|');
             const sp = this.sweep ? '888' : (v.speedText == null ? '' : String(v.speedText));
             const all = key !== this.centerKey;
             if (all || (sp !== this.centerSpeed && now - this.centerAt >= LCD_MIN_MS)) {
-                const cv = F.centerInfo(v.rangeText || '---', v.odoText || '---', { illum: s.illum, style: s.style, mode: v.modeText || '', speed: sp, unit });
+                const cv = F.centerInfo(v.rangeText || '---', v.odoText || '---', { mode: v.modeText || '', speed: sp, unit });
                 if (all) this.cr.pixels(this.refs.center, null, buf(cv));
                 else this.cr.pixels(this.refs.center, [F.CSPEED], crop(cv, F.CSPEED));
                 this.centerKey = key; this.centerSpeed = sp; this.centerAt = now;
@@ -494,7 +498,7 @@ class ClassicCluster {
         text = text == null ? '' : String(text);
         if (text === this.lcdText[key] || now - (this.lcdAt[key] || 0) < LCD_MIN_MS) return;
         this.lcdText[key] = text; this.lcdAt[key] = now;
-        this.cr.pixels(ref, null, buf(F.lcd(text, unit, { illum: s.illum, center, style: s.style })));
+        this.cr.pixels(ref, null, buf(F.lcd(text, unit, { center })));
     }
 
     /**

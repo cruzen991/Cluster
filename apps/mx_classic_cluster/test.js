@@ -26,7 +26,7 @@ assert.deepStrictEqual([0, 4999, 5000, 5199, 5200, 6000, 6799, 6800, 6999, 7000,
 }));
 
 /* every style draws, and its moving parts make a shader without holes */
-for (const st of ['tech', 'sport', 'classic']) {
+for (const st of ['tech']) {
     const o = { style: st, units: 'mph', redline: 7000, max: 8000, tempUnit: 'f' };
     assert.strictEqual(F.speedoFace(o).d.length, F.D * F.D * 4);
     assert.strictEqual(F.tachFace(o).d.length, F.D * F.D * 4);
@@ -66,7 +66,7 @@ for (const st of ['tech', 'sport', 'classic']) {
 }
 
 /* dirty rectangles cover every pixel that changes (the redrawn mode depends on it) */
-for (const st of ['tech', 'classic']) {
+for (const st of ['tech']) {
     const sp = F.dialFx(st, 'rpm', { redline: 7000, max: 8000 });
     const cases = [[{ a: -125, b: -52, c: -52, lv: 0 }, { a: -100, b: -40, c: -30, lv: 0 }],
         [{ a: 10, b: 0, c: 10, lv: 3 }, { a: 17, b: 0, c: 25, lv: 6 }],
@@ -101,7 +101,6 @@ for (const st of ['tech', 'classic']) {
     // the gear window's pixels are transparent where there is no text (the needle shows through)
     const lc = F.lcd('2', '', { style: 'tech', center: true });
     assert.strictEqual(lc.d[3], 0, 'corner transparent');
-    for (const stl of ['classic', 'sport']) assert.strictEqual(F.lcd('2', '', { style: stl, center: true }).d[3], 0, stl + ' window transparent');
 }
 
 /* the arc style */
@@ -185,6 +184,19 @@ for (const st of ['tech', 'classic']) {
     assert(lit > 1500, 'the gear letter is drawn (' + lit + ')');
 }
 
+/* the arc background: half size, opaque, dark above the horizon, lines below it */
+{
+    const A = require('./arc');
+    const bg = A.gridBackground();
+    assert.strictEqual(bg.d.length, A.BG_W * A.BG_H * 4);
+    let opaque = true, top = 0, bottom = 0;
+    for (let i = 3; i < bg.d.length; i += 4) if (bg.d[i] !== 255) opaque = false;
+    for (let x = 0; x < A.BG_W; x++) { top = Math.max(top, bg.d[(20 * A.BG_W + x) * 4]); bottom = Math.max(bottom, bg.d[((A.BG_H - 10) * A.BG_W + x) * 4]); }
+    assert(opaque, 'the background is opaque: it hides the stock cluster');
+    assert(top < 20, 'black at the top (' + top + ')');
+    assert(bottom > 60, 'red lines near the bottom (' + bottom + ')');
+}
+
 /* a bad sample never freezes a needle */
 {
     const C = require('./cluster');
@@ -210,7 +222,8 @@ for (const st of ['tech', 'classic']) {
     const r = spec.settings.find((x) => x.key === 'renderer');
     assert(r && r.default === 'software' && r.hidden && r.reset);
     assert.strictEqual(spec.settings.find((x) => x.key === 'style').default, 'tech');
-    assert(spec.settings.find((x) => x.key === 'style').options.some((o) => o[0] === 'arc'));
+    assert.deepStrictEqual(spec.settings.find((x) => x.key === 'style').options.map((o) => o[0]).sort(), ['arc', 'tech'], 'only the Arc and Tech styles');
+    assert(!spec.settings.some((x) => x.key === 'illum'));
     assert(spec.config.dme.iat.length >= 1 && spec.signals['de.bmw.infrastructure.EnvironmentalInformation']._optional);
     assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "redraw");
     assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');

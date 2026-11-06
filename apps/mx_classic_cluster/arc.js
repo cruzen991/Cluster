@@ -157,6 +157,45 @@ function arcFx(opts) {
     };
 }
 
+/* ---------- the background: a red perspective grid under the dials ---------- */
+const BG_W = 960, BG_H = 360;             // drawn at half size; cluster-render stretches it (bilinear) to 1920 x 720
+
+/**
+ * The "horizon grid": a floor of red lines from a horizon just below the middle, fading out towards
+ * the horizon, with a dim red glow along it. Drawn at half size (BG_W x BG_H, 1.4 MB instead of
+ * 5.5 MB of cluster-render's shared 16 MB); the renderer's bilinear stretch softens the lines a little.
+ * Each pixel works out its distance to the nearest line, so the lines are anti-aliased.
+ */
+function gridBackground() {
+    const cv = new Canvas(BG_W, BG_H), d = cv.d;
+    const cx = BG_W / 2, hz = 215, depth = 245, rows = 21;
+    // the horizontal lines: their y and brightness (closer = lower and brighter)
+    const hl = [];
+    for (let k = 1; k <= rows; k++) hl.push({ y: hz + (BG_H - hz) * Math.pow(k / rows, 2.2), a: Math.pow(k / rows, 0.8) });
+    for (let y = 0; y < BG_H; y++) {
+        const py = y + 0.5;
+        const fade = py <= hz ? 0 : Math.min(1, (py - hz) / 110);
+        let hr = 0;
+        for (const l of hl) { const c = 1.2 - Math.abs(py - l.y); if (c > 0) hr = Math.max(hr, Math.min(1, c) * l.a); }
+        const spacing = 5 + 65 * (py - hz) / depth;            // the converging lines' spacing at this row
+        for (let x = 0; x < BG_W; x++) {
+            const px = x + 0.5, i = (y * BG_W + x) * 4;
+            // glow along the horizon, wide and flat
+            const gd = Math.hypot((px - cx) / 2.5, py - hz) / 250;
+            let g = gd < 1 ? (1 - gd) * (1 - gd) * (3 - 2 * (1 - gd)) * 0.6 : 0;
+            let r = 60 * g, gr = 6 * g, b = 6 * g;
+            if (fade > 0) {
+                const t = (px - cx) / spacing, dist = Math.abs(t - Math.round(t)) * spacing;
+                const v = Math.max(0, Math.min(1, 1.1 - dist)) * 0.75;
+                const h = hr;
+                r += fade * Math.max(120 * h, 90 * v); gr += fade * Math.max(10 * h, 8 * v); b += fade * Math.max(12 * h, 10 * v);
+            }
+            d[i] = r > 255 ? 255 : r; d[i + 1] = gr; d[i + 2] = b; d[i + 3] = 255;
+        }
+    }
+    return cv;
+}
+
 /* ---------- the readout panels: cells redrawn one at a time, only their rectangles sent ---------- */
 
 class Panel {
@@ -270,7 +309,7 @@ function bigText(cv, str, x, y, size, col) {
 }
 
 module.exports = {
-    bigText,
+    bigText, gridBackground, BG_W, BG_H,
     DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
 };

@@ -7,21 +7,23 @@ background while the dials are on; BMW's warning and indicator lights are drawn 
 
 ![The Tech style](docs/cluster.png)
 
-Four gauge styles (Settings → *Gauge style*):
+Two gauge styles (Settings → *Gauge style*):
 
 - **Tech** (the default): Orbitron numerals, hollow red needles with a glow, a white ring along each dial that lights
   up behind the needle, and **shift lights**: ten segments outside the tach over the 2,000 rpm below the redline,
   lighting green, then yellow, then red, one more every 200 rpm, and all flashing red from the redline (setting
   *Shift lights*, on).
-- **Sport**: rimless faces, bold white markings, solid red needles ([picture](docs/sport.png)).
-- **Classic**: chrome rings, orange markings, orange-red needles ([picture](docs/classic.png)).
-- **Arc** (new in 0.10.0): one tachometer in the middle with the gear and speed inside it, a red arc that fills
+- **Arc**: one tachometer in the middle with the gear and speed inside it, a red arc that fills
   with the revs, a "red glass" needle (pale outline, see-through red middle, red glow) and the shift lights; numerals that grow as the needle comes up to them; big
   readouts left (oil, coolant, fuel bar, range) and right (boost, torque, odometer); and a strip along the bottom
-  with the outside temperature, the drive mode and the intake air temperature ([picture](docs/arc.png)). The stock
-  cluster is always hidden in this style.
+  with the outside temperature, the drive mode and the intake air temperature, over a red perspective grid that
+  fades into a horizon below the middle ([picture](docs/arc.png)). The stock cluster is always hidden in this style.
+  The grid is drawn at half size (960x360, 1.4 MB of cluster-render's shared 16 MB) and stretched by the renderer.
 
-The round-dial styles are 0-160 mph by default (0-260 km/h in km/h).
+The Sport and Classic styles were removed in 0.11.0 (they are in this repository's history up to 0.10.3); a car
+set to either shows the Tech style.
+
+The Tech style's speedometer is 0-160 mph by default (0-260 km/h in km/h).
 
 It is an app for the [MGU Store](https://github.com/robertnisipeanu/mgu-store). It draws through
 [cluster-render](https://github.com/robertnisipeanu/idrive-apps/tree/main/native/cluster-render) on the cluster's
@@ -109,8 +111,8 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which othe
 
 ## Settings
 
-Show on the cluster; gauge style (Tech, Sport, Classic, Arc); torque in lb-ft or Nm (Arc); shift lights (on); stock cluster hidden (default) or showing
-between the dials; mph or km/h; °F or °C; classic orange or white dial lighting (Classic style); redline (7000 for a
+Show on the cluster; gauge style (Tech, Arc); torque in lb-ft or Nm (Arc); shift lights (on); stock cluster hidden (default) or showing
+between the dials; mph or km/h; °F or °C; redline (7000 for a
 B58); the needle sweep at start; tank size (59 l for a G20 M340i); moving the dials apart, together, up or down;
 needles drawn as redrawn images (default) or by a shader; boost signal gauge or absolute; retry after BMW pop-ups (off); demo data on the cluster
 (never, by default).

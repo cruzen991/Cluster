@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Classic Cluster - classic BMW round dials with orange needles on the instrument cluster.
+ * Classic Cluster - custom gauges on the instrument cluster: the Arc and Tech styles.
  *
  * The app reads the car's speed, engine speed, oil temperature, gear and fuel level the way
  * the other kit apps do (kit/car.js, SOME/IP fields the head unit already receives) and draws
@@ -38,7 +38,6 @@ mgu.run({
             on: settings.get('on') !== false,
             units: settings.get('units') || 'mph',
             tempUnit: settings.get('tempUnit') || 'f',
-            illum: settings.get('illum') || 'orange',
             redline: Number(settings.get('redline')) || 7000,
             sweep: settings.get('sweep') !== false,
             backdrop: settings.get('backdrop') === 'none' ? 'none' : 'full',
@@ -48,7 +47,7 @@ mgu.run({
             dy: Number(settings.get('dy')) || 0,
             demo: settings.get('demo') === 'on',
             retake: settings.get('retake') === true,
-            style: ['classic', 'sport', 'arc'].indexOf(settings.get('style')) >= 0 ? settings.get('style') : 'tech',
+            style: settings.get('style') === 'arc' ? 'arc' : 'tech',     // 'sport' / 'classic' saved by an older version: tech
             torqueUnit: settings.get('torqueUnit') === 'nm' ? 'nm' : 'lbft',
             shift: settings.get('shift') !== false,
             needles: settings.get('needles') === 'shader' ? 'shader' : 'redraw',
