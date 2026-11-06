@@ -175,7 +175,7 @@ for (const st of ['tech']) {
     const v = { oilC: 90, coolC: 88, iatC: 30, outsideC: 18, boostPsi: 12.34, torqueNm: 400, fuel: 0.5, speedText: '48', gearText: 'D3', rangeText: '212 mi', odoText: '41,820 mi', modeText: 'Sport Plus' };
     const t = arcTexts(s, v, false);
     assert.deepStrictEqual([t.left.oil, t.left.cool, t.right.boost, t.right.torque, t.right.tq, t.strip.intake, t.strip.outside, t.strip.mode, t.right.odo],
-        ['194', '190', '12.3', '295', 'LB-FT', '86°F', '64°F', 'SPORT PLUS', '41,820 MI']);
+        ['194', '190', '12', '295', 'LB-FT', '86°F', '64°F', 'SPORT PLUS', '41,820 MI']);
     const tn = arcTexts({ tempUnit: 'c', torqueUnit: 'nm', units: 'kmh' }, { boostPsi: null, torqueNm: NaN, iatC: null }, false);
     assert.deepStrictEqual([tn.right.boost, tn.right.torque, tn.right.tq, tn.strip.intake, tn.left.oil, tn.centre.unit], ['--', '--', 'NM', '--', '--', 'KM/H']);
     const p = new A.Panel(L.right.w, L.right.h);
@@ -183,11 +183,11 @@ for (const st of ['tech']) {
     assert.strictEqual(p.take().whole, true);
     A.drawRight(p, t.right);
     assert.strictEqual(p.take().rects.length, 0, 'nothing changed, nothing sent');
-    A.drawRight(p, Object.assign({}, t.right, { boost: '12.4' }));
+    A.drawRight(p, Object.assign({}, t.right, { boost: '13' }));
     const one = p.take().rects;
     assert.strictEqual(one.length, 1, 'one digit changed, one slot sent');
     assert(one[0].w < 90, 'only that digit (' + one[0].w + ' px wide)');
-    A.drawRight(p, Object.assign({}, t.right, { boost: '9.8' }));
+    A.drawRight(p, Object.assign({}, t.right, { boost: '9' }));
     assert(p.take().rects.some((q) => q.w >= 400), 'fewer digits: the whole value again');
     // big gear letters draw (the 110 px atlas has only figures)
     const g = new A.Panel(L.centre.w, L.centre.h);

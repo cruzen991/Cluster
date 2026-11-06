@@ -547,7 +547,7 @@ function arcTexts(s, v, sweep) {
     const T = (c) => (c == null || !isFinite(c) ? '--' : String(Math.round(f ? c * 9 / 5 + 32 : c)));
     const lb = s.torqueUnit !== 'nm';
     const tq = v.torqueNm == null || !isFinite(v.torqueNm) ? '--' : String(Math.round((lb ? v.torqueNm * 0.737562 : v.torqueNm) / 5) * 5);   // in fives: steadier, fewer uploads
-    const boost = v.boostPsi == null || !isFinite(v.boostPsi) ? '--' : Math.max(0, v.boostPsi).toFixed(1);
+    const boost = v.boostPsi == null || !isFinite(v.boostPsi) ? '--' : String(Math.round(Math.max(0, v.boostPsi)));   // whole psi
     const up = (x) => String(x == null ? '' : x).toUpperCase();
     return {
         centre: { gear: sweep ? '88' : (v.gearText || '-'), speed: sweep ? '888' : (v.speedText == null ? '---' : String(v.speedText)), unit: s.units === 'kmh' ? 'KM/H' : 'MPH' },

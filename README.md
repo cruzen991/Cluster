@@ -179,7 +179,7 @@ rpm every 3 s, boost and torque following), by needle setting:
 | Needles | Sent to the cluster | How the needle moves |
 |---|---|---|
 | Redrawn images (default) | about 2.0 MB/s | 5 times a second, the dial's pixels redrawn |
-| Rotating layer | about 0.7 MB/s | 30 times a second: the needle is its own small layer that the renderer turns (a message of a few bytes); only the lit arc, the shift lights and the growing numerals are redrawn |
+| Rotating layer | about 0.6 MB/s | 30 times a second: the needle is its own small layer that the renderer turns (a message of a few bytes); only the lit arc, the shift lights and the growing numerals are redrawn |
 | Shader | about 0.7 MB/s | every frame, from one uniform |
 
 The readouts draw their figures in fixed slots, so a change of one digit sends only that digit; a growing
