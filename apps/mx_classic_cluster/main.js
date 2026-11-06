@@ -27,7 +27,7 @@ const TOGGLE_MS = 1000;            // presses of on / off closer than this are o
 const KOMBI = 'de.bmw.infotainment.KombiIF';
 const FES = 'de.bmw.infotainment.drivingexcitement.FES';
 const ENV = 'de.bmw.infrastructure.EnvironmentalInformation';
-const IAT_MS = 3000;               // intake air temperature: one read from the engine unit every 3 s (arc style only)
+const IAT_MS = 2000;               // intake air temperature: one read from the engine unit every 2 s (arc style only)
 const IAT_STALE_MS = 15000;        // and shown as -- when the last good one is older than this
 const { modeOf, boostPsiOf } = require('./modes');
 
@@ -161,7 +161,8 @@ mgu.run({
             const demo = d.demo && s.demo;
             const info = { modeText: demo ? 'Sport' : modeText, rangeText: (demo ? '312' : dist(rangeKm)) + ' ' + du, odoText: (demo ? '23,817' : dist(odoKm)) + ' ' + du,
                 // slow values: shown while they are recent, whatever the engine is doing
-                outsideC: demo ? 18 : (now - outsideAt < 120000 ? outsideC : null), iatC: demo ? 34 : (now - iatAt < IAT_STALE_MS ? iatC : null) };
+                outsideC: demo ? 18 : outsideC,     // the car sends it only when it changes: the last one stays true
+                iatC: demo ? 34 : (now - iatAt < IAT_STALE_MS ? iatC : null) };
             if (!usable) return Object.assign({ speed: 0, rpm: 0, fuel: null, oil: null, oilC: null, coolC: null, boost: null, boostPsi: null, torqueNm: null, speedText: '---', gearText: '-', live: false }, info);
             const kmh = d.speed || 0, speed = s.units === 'kmh' ? kmh : kmh / 1.609344;
             const oilC = typeof d.oil === 'number' ? d.oil : null;

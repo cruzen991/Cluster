@@ -99,11 +99,11 @@ The app's own loop catches its errors, but a freeze is not something it can see 
 | Range and odometer (centre panel) | `KombiIF.statusRangeTankStatus` |
 | Coolant (Arc) | `CDS.statusEngineTemperature` |
 
-In the Arc style the oil, coolant, intake and outside temperatures refresh every 3 s (boost, torque, speed and gear 4 times a second): temperatures move slowly, and a value flickering between two degrees would otherwise redraw and re-upload its big figures for nothing.
+In the Arc style oil and coolant refresh every 3 s, intake every 2 s (read from the engine unit every 2 s), outside temperature every 2 minutes (boost, torque, speed and gear 4 times a second): temperatures move slowly, and a value flickering between two degrees would otherwise redraw and re-upload its big figures for nothing.
 
 | Torque (Arc), lb-ft or Nm, in steps of 5 | `FES.statusActualValueTorque2` (`actualValueTorqueCrankshaft`, 0.5 Nm a bit, the kit's scaling); engine braking shows 0. Treat it as the engine unit's estimate, not a dyno figure; scaling unverified on this car |
 | Outside temperature (Arc) | `EnvironmentalInformation.ExteriorTemperature` (raw x 0.5 - 40 °C) |
-| Intake air temperature (Arc) | read from the engine unit (DME, 0x12) every 3 s over the head unit's diagnostic link, **read-only**: the kit's `readonly-diag.js` refuses anything but ReadDataByIdentifier / OBD reads, so the app cannot write to or reset any control unit. Same candidates as the kit's M Vitals app (`22 F40F`, `22 F477`, OBD PID 0F). Only while the Arc style is on the cluster; `--` when the engine unit does not answer |
+| Intake air temperature (Arc) | read from the engine unit (DME, 0x12) every 2 s over the head unit's diagnostic link, **read-only**: the kit's `readonly-diag.js` refuses anything but ReadDataByIdentifier / OBD reads, so the app cannot write to or reset any control unit. Same candidates as the kit's M Vitals app (`22 F40F`, `22 F477`, OBD PID 0F). Only while the Arc style is on the cluster; `--` when the engine unit does not answer |
 
 The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which other apps already use on cars.
 

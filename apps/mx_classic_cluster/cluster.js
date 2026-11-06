@@ -37,7 +37,8 @@ const LCD_MIN_MS = 200;            // an LCD's text is redrawn at most 5 times a
 const REDRAW_FPS = 5;              // redrawn mode: dial updates a second at most (each costs CPU)
 const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
 const MAX_LAYERS = 8;              // cluster-render's per-client limit
-const SLOW_MS = 3000;              // arc style: oil, coolant, intake and outside temperatures change slowly: shown values refresh every 3 s
+/* arc style: how often each slow value shown is refreshed (ms); a value that was missing shows at once */
+const SLOW_MS = { oilC: 3000, coolC: 3000, iatC: 2000, outsideC: 120000 };
 const PANEL_MS = 250;              // arc style: readouts redrawn at most 4 times a second (big figures cost upload)
 
 /* where the two dials sit on the panel; dx moves both outwards (+) or inwards (-) */
@@ -444,8 +445,12 @@ class ClassicCluster {
         this.panelAt = now;
         // the temperatures are taken every SLOW_MS only: a value flickering between two degrees would
         // otherwise redraw and upload its big figures several times a second for nothing
-        if (!this.slow || now - this.slow.at >= SLOW_MS) this.slow = { at: now, oilC: v.oilC, coolC: v.coolC, iatC: v.iatC, outsideC: v.outsideC };
-        const t = arcTexts(s, Object.assign({}, v, this.slow), this.sweep);
+        const sl = this.slow = this.slow || { at: {}, v: {} };
+        for (const k of Object.keys(SLOW_MS)) {
+            const missing = sl.v[k] == null && v[k] != null;
+            if (!(k in sl.v) || missing || now - sl.at[k] >= SLOW_MS[k]) { sl.v[k] = v[k]; sl.at[k] = now; }
+        }
+        const t = arcTexts(s, Object.assign({}, v, sl.v), this.sweep);
         A.drawCentre(this.panels.centre.p, t.centre);
         A.drawLeft(this.panels.left.p, t.left);
         A.drawRight(this.panels.right.p, t.right);
