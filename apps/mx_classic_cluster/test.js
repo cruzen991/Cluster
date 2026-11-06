@@ -104,3 +104,19 @@ console.log('classic cluster self-check ok');
     }
     console.log('redraw self-check ok');
 }
+
+/* drive mode text, and both gauge styles draw */
+{
+    const { modeOf } = require('./modes');
+    assert.deepStrictEqual(['SPORT_DYNAMIC', 2, 4, 'ECO_PRO_EFFICIENT', 0, 63, 'COMFORT_PLUS', undefined].map(modeOf),
+        ['Sport', 'Sport Plus', 'Comfort', 'Eco Pro', null, null, 'Comfort Plus', null]);
+    ['sport', 'classic'].forEach((st) => {
+        assert.strictEqual(F.speedoFace({ style: st, units: 'mph' }).d.length, F.D * F.D * 4);
+        assert.strictEqual(F.tachFace({ style: st, redline: 7000, max: 8000, tempUnit: 'f' }).d.length, F.D * F.D * 4);
+        assert.strictEqual(F.centerInfo('9:41', '300 mi', '1 mi', { style: st, mode: 'Sport Plus' }).d.length, F.CENTER.w * F.CENTER.h * 4);
+        assert.strictEqual(F.lcd('88', 'mph', { style: st }).d.length, F.LCD.w * F.LCD.h * 4);
+        const fs = F.needleShader({ w: 100, h: 100, px: 50, py: 50, len: 40, tail: 10, wid: 6, col: F.style(st).rgb });
+        assert(!/NaN|undefined/.test(fs));
+    });
+    console.log('styles and drive mode self-check ok');
+}

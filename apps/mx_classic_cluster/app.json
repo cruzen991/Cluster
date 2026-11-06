@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Classic BMW round dials with orange needles on the instrument cluster",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -17,6 +17,9 @@
     "de.bmw.infrastructure.VehicleInformation": {
       "statusGearboxDrive": "s",
       "DataPowerTrain2": "s"
+    },
+    "de.bmw.infotainment.drivingexcitement.FES": {
+      "statusFESVehicleDynamicSwitchHMI": "rs"
     },
     "de.bmw.infotainment.KombiIF": {
       "statusRangeTankStatus": "rs"
@@ -36,11 +39,13 @@
   ],
   "settings": [
     {"key": "on", "label": "Show on the cluster", "type": "bool", "default": true},
+    {"key": "style", "label": "Gauge style", "type": "choice", "default": "sport", "reset": 1,
+     "options": [["sport", "Sport (white, red needles)"], ["classic", "Classic (orange)"]]},
     {"key": "units", "label": "Speed", "type": "choice", "default": "mph",
      "options": [["mph", "mph (km/h inner scale)"], ["kmh", "km/h (mph inner scale)"]]},
     {"key": "tempUnit", "label": "Oil temperature", "type": "choice", "default": "f",
      "options": [["f", "Fahrenheit"], ["c", "Celsius"]]},
-    {"key": "illum", "label": "Dial lighting", "type": "choice", "default": "orange",
+    {"key": "illum", "label": "Dial lighting (classic style)", "type": "choice", "default": "orange",
      "options": [["orange", "Classic orange"], ["white", "White"]]},
     {"key": "redline", "label": "Redline", "type": "number", "unit": "rpm", "default": 7000,
      "steps": [5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500]},

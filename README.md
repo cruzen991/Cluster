@@ -6,7 +6,14 @@ segments that go out as the oil warms, two LCD windows for digital speed and gea
 range and odometer. By default the stock gauges are hidden behind a black background while the dials are on; BMW's
 warning and indicator lights are drawn by the cluster above it.
 
-![The cluster](docs/cluster.png)
+![The sport style](docs/cluster.png)
+
+![The classic style](docs/classic.png)
+
+Two gauge styles (Settings → *Gauge style*): **Sport** (the default: rimless faces, white markings, red needles, a
+large white digital speed) and **Classic** (the first design: chrome rings, orange markings, orange-red needles). Both
+read 0-160 mph by default (0-260 km/h in km/h). The centre panel shows the current drive mode as text (Comfort,
+Sport, Sport Plus, Eco Pro, ...), the clock, the range and the odometer.
 
 It is an app for the [MGU Store](https://github.com/robertnisipeanu/mgu-store). It draws through
 [cluster-render](https://github.com/robertnisipeanu/idrive-apps/tree/main/native/cluster-render) on the cluster's
@@ -79,6 +86,8 @@ The app's own loop catches its errors, but a freeze is not something it can see 
 | Oil temperature, 120-300 °F or 50-150 °C | `CDS.statusEngineTemperature` |
 | Fuel, 0-1/1 | `KombiIF.statusRangeTankStatus` (litres) over the tank size setting |
 | Gear LCD: P, R, N, D1-D8 | `VehicleInformation.statusGearboxDrive` / `DataPowerTrain2` |
+| Drive mode (centre panel, text) | `FES.statusFESVehicleDynamicSwitchHMI` (`actualValueModeDrivingExperience`), decoded with the idrive7-apps Live Data app's table; *DRIVE MODE ---* until the car sends one |
+| Range and odometer (centre panel) | `KombiIF.statusRangeTankStatus` |
 
 The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which other apps already use on cars.
 
@@ -129,6 +138,7 @@ again, press the controller's MENU or HOME button, or hold the volume knob down 
 | `apps/mx_classic_cluster/faces.js` | the artwork: faces, needles, hubs, warm-up segments, LCDs (pure JavaScript) |
 | `apps/mx_classic_cluster/cluster.js` | the cluster layers through cluster-render, needle smoothing, the sweep |
 | `apps/mx_classic_cluster/main.js` | the app: car data, on/off, safety rules, its own screen |
+| `apps/mx_classic_cluster/modes.js` | the drive mode as text |
 | `apps/mx_classic_cluster/guard.js` | turns the cluster off by itself after repeated failures (above) |
 | `apps/mx_classic_cluster/cluster_render_client.js` | cluster-render's Node client (MPL-2.0, unchanged) |
 | `apps/mx_classic_cluster/test.js` | `node apps/mx_classic_cluster/test.js` |

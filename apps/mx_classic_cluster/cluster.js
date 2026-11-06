@@ -150,7 +150,7 @@ class ClassicCluster {
     build() {
         const s = this.getSettings();
         const L = layout(s.dx, s.dy);
-        const key = JSON.stringify([s.units, s.illum, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
+        const key = JSON.stringify([s.style, s.units, s.illum, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
         if (!this.cr || key === this.faceKey) return;
         const first = !this.faceKey;
         this.faceKey = key;
@@ -158,8 +158,8 @@ class ClassicCluster {
         const cr = this.cr, r = this.refs;
         const D = F.D, C = F.C;
 
-        const speedo = F.speedoFace({ units: s.units, illum: s.illum });
-        const tach = F.tachFace({ illum: s.illum, redline: s.redline, max: tachMax(s.redline), tempUnit: s.tempUnit });
+        const speedo = F.speedoFace({ style: s.style, units: s.units, illum: s.illum });
+        const tach = F.tachFace({ style: s.style, illum: s.illum, redline: s.redline, max: tachMax(s.redline), tempUnit: s.tempUnit });
 
         if (!first) Object.keys(r).forEach((k) => { if (Array.isArray(r[k])) r[k].forEach((x) => cr.drop(x)); else cr.drop(r[k]); });
         this.refs = {};
@@ -205,9 +205,11 @@ class ClassicCluster {
         this.segLit = R.segs.map(() => false);
 
         // needles: main 270 px tip, 62 px tail; small ones 66 / 16
-        const big = Object.assign(F.needle(270, 62, 15, true), { len: 270, tail: 62, wid: 15 });
-        const small = Object.assign(F.needle(66, 16, 8, true), { len: 66, tail: 16, wid: 8 });
-        const hubBig = F.hub(36), hubSmall = F.hub(11);
+        const pal = F.style(s.style);
+        this.pal = pal;
+        const big = Object.assign(F.needle(270, 62, 15, true, pal.needle), { len: 270, tail: 62, wid: 15 });
+        const small = Object.assign(F.needle(66, 16, 8, true, pal.needle), { len: 66, tail: 16, wid: 8 });
+        const hubBig = F.hub(36, s.style), hubSmall = F.hub(11, s.style);
         // Two ways to draw a needle (setting "Needles"):
         //   shader  an unturned quad over the needle's sweep; a fragment shader draws the needle at
         //           the angle in the uniform u_a. Moving it sends a uniform.
@@ -220,7 +222,7 @@ class ClassicCluster {
                 const box = Math.min(2 * reach, D);
                 const x = Math.max(0, Math.round(cx - box / 2)), y = Math.max(0, Math.round(cy - box / 2));
                 const w = Math.min(box, W - x), h = Math.min(box, H - y);
-                const sp = { w, h, px: cx - x, py: cy - y, len: n.len, tail: n.tail, wid: n.wid };
+                const sp = { w, h, px: cx - x, py: cy - y, len: n.len, tail: n.tail, wid: n.wid, col: pal.rgb };
                 const ref = cr.effect({ target: TARGET, z, x, y, w, h, fs: F.needleShader(sp), contend: s.retake ? 1 : 0 });
                 cr.uniform(ref, 'u_a', [F.A0]);
                 return ref;
@@ -234,7 +236,7 @@ class ClassicCluster {
                 const w = Math.min(box, W - x), h = Math.min(box, H - y);
                 const cv = new F.Canvas(w, h);
                 const r = { cv, px: cx - x, py: cy - y, n, ang: F.A0, at: 0 };
-                F.drawNeedleAt(cv, r.px, r.py, F.A0, n.len, n.tail, n.wid, REDRAW_PIECES);
+                F.drawNeedleAt(cv, r.px, r.py, F.A0, n.len, n.tail, n.wid, REDRAW_PIECES, pal.needle);
                 const ref = img({ z, x, y, w, h });
                 cr.pixels(ref, null, buf(cv));
                 this.redraw[ref] = r;
@@ -343,10 +345,10 @@ class ClassicCluster {
         this.lcd('gear', this.refs.lcdGear, this.sweep ? '88' : v.gearText, '', now, s, true);
         if (this.refs.center) {
             const d = new Date(), clock = (d.getHours() % 12 || 12) + ':' + ('0' + d.getMinutes()).slice(-2);
-            const key = [clock, v.rangeText, v.odoText, s.illum].join('|');
+            const key = [clock, v.rangeText, v.odoText, v.modeText, s.illum, s.style].join('|');
             if (key !== this.centerText) {
                 this.centerText = key;
-                this.cr.pixels(this.refs.center, null, buf(F.centerInfo(clock, v.rangeText || '---', v.odoText || '---', { illum: s.illum })));
+                this.cr.pixels(this.refs.center, null, buf(F.centerInfo(clock, v.rangeText || '---', v.odoText || '---', { illum: s.illum, style: s.style, mode: v.modeText || '' })));
             }
         }
     }
@@ -369,7 +371,7 @@ class ClassicCluster {
         });
         rects = rects.map(clip).filter(Boolean);
         rects.forEach((q) => { for (let y = q.y; y < q.y + q.h; y++) d.fill(0, (y * cv.w + q.x) * 4, (y * cv.w + q.x + q.w) * 4); });
-        F.drawNeedleAt(cv, r.px, r.py, ang, n.len, n.tail, n.wid, REDRAW_PIECES);
+        F.drawNeedleAt(cv, r.px, r.py, ang, n.len, n.tail, n.wid, REDRAW_PIECES, this.pal.needle);
         r.ang = ang; r.at = now;
         const bytes = rects.reduce((t, q) => t + q.w * q.h * 4, 0);
         if (rects.length > 16) { this.cr.pixels(ref, null, buf(cv)); return; }
@@ -383,7 +385,7 @@ class ClassicCluster {
         text = text == null ? '' : String(text);
         if (text === this.lcdText[key] || now - this.lcdAt[key] < LCD_MIN_MS) return;
         this.lcdText[key] = text; this.lcdAt[key] = now;
-        this.cr.pixels(ref, null, buf(F.lcd(text, unit, { illum: s.illum, center })));
+        this.cr.pixels(ref, null, buf(F.lcd(text, unit, { illum: s.illum, center, style: s.style })));
     }
 
     /**

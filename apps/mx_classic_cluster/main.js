@@ -23,6 +23,8 @@ const { Guard } = require('./guard');
 const W = 1600, H = 520;
 const STALE_MS = 1500;
 const KOMBI = 'de.bmw.infotainment.KombiIF';
+const FES = 'de.bmw.infotainment.drivingexcitement.FES';
+const { modeOf } = require('./modes');
 
 mgu.run({
     async start(ctx) {
@@ -40,12 +42,13 @@ mgu.run({
             dy: Number(settings.get('dy')) || 0,
             demo: settings.get('demo') === 'on',
             retake: settings.get('retake') === true,
+            style: settings.get('style') === 'classic' ? 'classic' : 'sport',
             needles: ['image', 'sharp', 'redraw'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'shader',
         });
 
         // fuel: litres in the tank from the cluster's own range / tank status
         // and the range and odometer for the centre panel, from the same field
-        let fuelL = null, rangeKm = null, odoKm = null;
+        let fuelL = null, rangeKm = null, odoKm = null, modeText = '';
         const car = new Car(ctx, ['rpm', 'speed', 'temps', 'gear'], {
             [KOMBI]: { statusRangeTankStatus: (v) => {
                 if (!v) return;
@@ -53,6 +56,11 @@ mgu.run({
                 if (typeof l === 'number' && l >= 0 && l < 255) fuelL = l;
                 if (typeof r === 'number' && r >= 0 && r < 4095) rangeKm = r;
                 if (typeof o === 'number' && o >= 0 && o < 16777215) odoKm = o;
+            } },
+            [FES]: { statusFESVehicleDynamicSwitchHMI: (v) => {
+                const raw = v && v.actualValueModeDrivingExperience, m = modeOf(raw);
+                if (m !== modeText && m !== null) log.info('drive mode ' + JSON.stringify(raw) + ' -> ' + m);
+                if (m !== null) modeText = m;
             } },
         });
         car.setRedline(S().redline);
@@ -99,7 +107,7 @@ mgu.run({
             const usable = fresh && (!d.demo || s.demo);
             const dist = (km) => (km === null ? '---' : String(Math.round(s.units === 'kmh' ? km : km / 1.609344)));
             const du = s.units === 'kmh' ? 'km' : 'mi';
-            const info = { rangeText: (d.demo && s.demo ? '312' : dist(rangeKm)) + ' ' + du, odoText: (d.demo && s.demo ? '23817' : dist(odoKm)) + ' ' + du };
+            const info = { modeText: d.demo && s.demo ? 'Sport' : modeText, rangeText: (d.demo && s.demo ? '312' : dist(rangeKm)) + ' ' + du, odoText: (d.demo && s.demo ? '23817' : dist(odoKm)) + ' ' + du };
             if (!usable) return Object.assign({ speed: 0, rpm: 0, fuel: null, oil: null, oilC: null, speedText: '---', gearText: '-', live: false }, info);
             const kmh = d.speed || 0, speed = s.units === 'kmh' ? kmh : kmh / 1.609344;
             const oilC = typeof d.oil === 'number' ? d.oil : null;
@@ -108,7 +116,7 @@ mgu.run({
             return {
                 speed, rpm: d.rpm || 0, fuel, oil: oilDial, oilC,
                 speedText: String(Math.round(speed)), gearText: gearText(d), live: !d.demo,
-                rangeText: info.rangeText, odoText: info.odoText,
+                rangeText: info.rangeText, odoText: info.odoText, modeText: info.modeText,
             };
         };
         setInterval(() => cluster.update(read()), 1000 / 30);
@@ -116,18 +124,18 @@ mgu.run({
         /* ---------- the head unit screen: a small copy of the dials and the status ---------- */
         let mini = null, miniKey = '';
         const miniFaces = () => {
-            const s = S(), key = JSON.stringify([s.units, s.illum, s.redline, s.tempUnit]);
+            const s = S(), key = JSON.stringify([s.style, s.units, s.illum, s.redline, s.tempUnit]);
             if (key === miniKey) return mini;
             miniKey = key;
-            const sp = F.speedoFace({ units: s.units, illum: s.illum });
-            const tc = F.tachFace({ illum: s.illum, redline: s.redline, max: tachMax(s.redline), tempUnit: s.tempUnit });
+            const sp = F.speedoFace({ style: s.style, units: s.units, illum: s.illum });
+            const tc = F.tachFace({ style: s.style, illum: s.illum, redline: s.redline, max: tachMax(s.redline), tempUnit: s.tempUnit });
             const shrink = (src) => { const c = new Canvas(400, 400); c.drawImage(src.d, src.w, src.h, 0, 0, 400, 400); return c; };
             mini = { sp: shrink(sp), tc: shrink(tc) };
             return mini;
         };
-        const needleLine = (cv, cx, cy, ang, len) => {
+        const needleLine = (cv, cx, cy, ang, len, col) => {
             const a = ang * Math.PI / 180;
-            cv.line(cx, cy, cx + Math.sin(a) * len, cy - Math.cos(a) * len, 5, F.NEEDLE.core);
+            cv.line(cx, cy, cx + Math.sin(a) * len, cy - Math.cos(a) * len, 5, col);
             cv.circle(cx, cy, 16, '#1a1a1b');
         };
         ctx.loop('MAIN', 4, () => {
@@ -135,8 +143,8 @@ mgu.run({
             const cv = new Canvas(W, H).clear(t.bg);
             const k = 400 / F.D;
             cv.blit(m.sp, 40, 60); cv.blit(m.tc, W - 440, 60);
-            needleLine(cv, 240, 260, lerp(F.A0, F.A1, clamp01(v.speed / (s.units === 'kmh' ? 260 : 160))), 270 * k);
-            needleLine(cv, W - 240, 260, lerp(F.A0, F.A1, clamp01(v.rpm / tachMax(s.redline))), 270 * k);
+            needleLine(cv, 240, 260, lerp(F.A0, F.A1, clamp01(v.speed / (s.units === 'kmh' ? 260 : 160))), 270 * k, F.style(s.style).needle.core);
+            needleLine(cv, W - 240, 260, lerp(F.A0, F.A1, clamp01(v.rpm / tachMax(s.redline))), 270 * k, F.style(s.style).needle.core);
             const mid = W / 2, col = st.target === 'shown' ? '#2fd27a' : st.target === 'idle' && !s.on ? t.dim : '#ffb020';
             cv.text('Classic Cluster', mid, 110, 44, t.text, { font: 'bold', align: 'center', literal: true });
             cv.text(!s.on ? (tripped ? 'Off for safety' : 'Off: stock cluster') : label(st.target), mid, 190, 44, col, { font: 'bold', align: 'center', literal: true });
