@@ -2,3 +2,5 @@ dist/
 oap-sdk/
 preview/
 node_modules/
+__pycache__/
+*.pyc

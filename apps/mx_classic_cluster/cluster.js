@@ -12,7 +12,9 @@
  *   needles    two main and two small needles, drawn once and turned by the renderer
  *              (the layer's `rotate`), so moving a needle sends a few bytes of JSON
  *   hubs       the caps over the needles' pivots
- *   backdrop   optional black side panels behind the dials
+ *   backdrop   a black panel over the whole stock cluster (a 16x16 image stretched by the renderer,
+ *              so it costs 1 KB, not 5.5 MB) and a centre panel with the clock, range and odometer;
+ *              BMW's warning and indicator lights are drawn above the panel by the cluster itself
  *
  * Values come in through update(values); a 30 Hz loop smooths the needles and sends a
  * rotation only when one moved by more than 0.1 degree.
@@ -160,14 +162,12 @@ class ClassicCluster {
         // (cluster-render's panel_take_over_stock is 0)
         const img = (o) => cr.image(Object.assign({ target: TARGET, visible: true, contend: s.retake ? 1 : 0 }, o));
 
-        if (s.backdrop === 'sides') {
-            // black panels behind each dial's half of the cluster, the centre left to the stock content
-            const bw = Math.round(L.speedo.cx + C + 10);
-            const side = new F.Canvas(bw, H).clear('#000000');
-            R.backL = img({ klass: 'ambient', x: 0, y: 0, w: bw, h: H });
-            cr.pixels(R.backL, null, buf(side));
-            R.backR = img({ klass: 'ambient', x: W - bw, y: 0, w: bw, h: H });
-            cr.pixels(R.backR, null, buf(side));
+        if (s.backdrop === 'full') {
+            const black = new F.Canvas(16, 16).clear('#000000');
+            R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: 16, ih: 16 });
+            cr.pixels(R.back, null, buf(black));
+            R.center = img({ z: 1, x: Math.round(W / 2 - F.CENTER.w / 2), y: Math.round(H / 2 - F.CENTER.h / 2), w: F.CENTER.w, h: F.CENTER.h });
+            this.centerText = null;
         }
 
         R.speedo = img({ z: 0, x: L.speedo.cx - C, y: L.speedo.cy - C, w: D, h: D });
@@ -275,6 +275,14 @@ class ClassicCluster {
         const unit = s.units === 'kmh' ? 'km/h' : 'mph';
         this.lcd('speed', this.refs.lcdSpeed, this.sweep ? '888' : v.speedText, unit, now, s, false);
         this.lcd('gear', this.refs.lcdGear, this.sweep ? '88' : v.gearText, '', now, s, true);
+        if (this.refs.center) {
+            const d = new Date(), clock = (d.getHours() % 12 || 12) + ':' + ('0' + d.getMinutes()).slice(-2);
+            const key = [clock, v.rangeText, v.odoText, s.illum].join('|');
+            if (key !== this.centerText) {
+                this.centerText = key;
+                this.cr.pixels(this.refs.center, null, buf(F.centerInfo(clock, v.rangeText || '---', v.odoText || '---', { illum: s.illum })));
+            }
+        }
     }
 
     lcd(key, ref, text, unit, now, s, center) {

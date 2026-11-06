@@ -246,7 +246,27 @@ function lcd(text, unit, opts) {
     return cv;
 }
 
+/**
+ * The centre panel shown when the stock cluster is hidden: a clock, the range and the odometer,
+ * in a classic orange-on-black window. Returns a Canvas of CENTER.w x CENTER.h.
+ */
+const CENTER = { w: 360, h: 190 };
+function centerInfo(clock, range, odo, opts) {
+    const il = ILLUM[(opts && opts.illum) || 'orange'] || ILLUM.orange;
+    const cv = new Canvas(CENTER.w, CENTER.h);
+    cv.roundRect(0, 0, CENTER.w, CENTER.h, 12, '#2a2a2c');
+    cv.roundRect(3, 3, CENTER.w - 6, CENTER.h - 6, 10, '#0d0b08');
+    cv.text(clock, CENTER.w / 2, 82, 64, il.lcd, { font: 'num', align: 'center', literal: true });
+    cv.fillRect(24, 104, CENTER.w - 48, 2, [255, 145, 36, 60]);
+    cv.text('RANGE', 30, 142, 22, il.dim, { font: 'bold', literal: true });
+    cv.text(range, CENTER.w - 30, 142, 32, il.lcd, { font: 'bold', align: 'right', literal: true });
+    cv.text('ODO', 30, 176, 22, il.dim, { font: 'bold', literal: true });
+    cv.text(odo, CENTER.w - 30, 176, 32, il.lcd, { font: 'bold', align: 'right', literal: true });
+    return cv;
+}
+
 module.exports = {
+    CENTER, centerInfo,
     Canvas, D, C, R_FACE, R_TICK, A0, A1, SUB, LCD, SEG, ILLUM, NEEDLE,
     angleOf, subAngleOf, pol, speedoFace, tachFace, needle, hub, segment, lcd,
 };

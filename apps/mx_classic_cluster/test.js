@@ -69,3 +69,13 @@ console.log('classic cluster self-check ok');
     assert.strictEqual(offs.length, 1, 'ten errors in a second: off');
     console.log('guard self-check ok');
 }
+
+/* the centre panel, and the app forcing the software screen (the GPU overlay was the blank-screen bug) */
+{
+    assert.strictEqual(F.centerInfo('10:42', '312 mi', '23817 mi').d.length, F.CENTER.w * F.CENTER.h * 4);
+    const spec = require('./app.json');
+    const r = spec.settings.find((x) => x.key === 'renderer');
+    assert(r && r.default === 'software' && r.hidden && r.reset, 'the screen stays on the software path');
+    assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
+    console.log('screen and backdrop self-check ok');
+}

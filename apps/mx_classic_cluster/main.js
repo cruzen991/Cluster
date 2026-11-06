@@ -34,7 +34,7 @@ mgu.run({
             illum: settings.get('illum') || 'orange',
             redline: Number(settings.get('redline')) || 7000,
             sweep: settings.get('sweep') !== false,
-            backdrop: settings.get('backdrop') || 'none',
+            backdrop: settings.get('backdrop') === 'none' ? 'none' : 'full',
             tank: Number(settings.get('tank')) || 59,
             dx: Number(settings.get('dx')) || 0,
             dy: Number(settings.get('dy')) || 0,
@@ -43,9 +43,16 @@ mgu.run({
         });
 
         // fuel: litres in the tank from the cluster's own range / tank status
-        let fuelL = null;
+        // and the range and odometer for the centre panel, from the same field
+        let fuelL = null, rangeKm = null, odoKm = null;
         const car = new Car(ctx, ['rpm', 'speed', 'temps', 'gear'], {
-            [KOMBI]: { statusRangeTankStatus: (v) => { const l = v && v.fluidLevelFuelTank; if (typeof l === 'number' && l >= 0 && l < 255) fuelL = l; } },
+            [KOMBI]: { statusRangeTankStatus: (v) => {
+                if (!v) return;
+                const l = v.fluidLevelFuelTank, r = v.range, o = v.mileageKilometre;
+                if (typeof l === 'number' && l >= 0 && l < 255) fuelL = l;
+                if (typeof r === 'number' && r >= 0 && r < 4095) rangeKm = r;
+                if (typeof o === 'number' && o >= 0 && o < 16777215) odoKm = o;
+            } },
         });
         car.setRedline(S().redline);
         let lastTick = 0;
@@ -89,7 +96,10 @@ mgu.run({
             const s = S(), d = car.data(), now = Date.now();
             const fresh = lastTick && now - lastTick < STALE_MS;
             const usable = fresh && (!d.demo || s.demo);
-            if (!usable) return { speed: 0, rpm: 0, fuel: null, oil: null, oilC: null, speedText: '---', gearText: '-', live: false };
+            const dist = (km) => (km === null ? '---' : String(Math.round(s.units === 'kmh' ? km : km / 1.609344)));
+            const du = s.units === 'kmh' ? 'km' : 'mi';
+            const info = { rangeText: (d.demo && s.demo ? '312' : dist(rangeKm)) + ' ' + du, odoText: (d.demo && s.demo ? '23817' : dist(odoKm)) + ' ' + du };
+            if (!usable) return Object.assign({ speed: 0, rpm: 0, fuel: null, oil: null, oilC: null, speedText: '---', gearText: '-', live: false }, info);
             const kmh = d.speed || 0, speed = s.units === 'kmh' ? kmh : kmh / 1.609344;
             const oilC = typeof d.oil === 'number' ? d.oil : null;
             const oilDial = oilC === null ? null : s.tempUnit === 'f' ? ((oilC * 9 / 5 + 32) - 120) / 180 : (oilC - 50) / 100;
@@ -97,6 +107,7 @@ mgu.run({
             return {
                 speed, rpm: d.rpm || 0, fuel, oil: oilDial, oilC,
                 speedText: String(Math.round(speed)), gearText: gearText(d), live: !d.demo,
+                rangeText: info.rangeText, odoText: info.odoText,
             };
         };
         setInterval(() => cluster.update(read()), 1000 / 30);

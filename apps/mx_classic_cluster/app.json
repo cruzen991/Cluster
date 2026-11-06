@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Classic BMW round dials with orange needles on the instrument cluster",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -45,8 +45,8 @@
     {"key": "redline", "label": "Redline", "type": "number", "unit": "rpm", "default": 7000,
      "steps": [5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500]},
     {"key": "sweep", "label": "Needle sweep at start", "type": "bool", "default": true},
-    {"key": "backdrop", "label": "Background", "type": "choice", "default": "none",
-     "options": [["none", "Dials only"], ["sides", "Black sides (covers the stock gauges)"]]},
+    {"key": "backdrop", "label": "Stock cluster", "type": "choice", "default": "full", "reset": 1,
+     "options": [["full", "Hidden (black background, centre info)"], ["none", "Shows between the dials"]]},
     {"key": "tank", "label": "Fuel tank size", "type": "number", "unit": "l", "default": 59,
      "steps": [40, 45, 50, 52, 55, 57, 59, 60, 63, 65, 68, 70, 74, 80]},
     {"key": "dx", "label": "Dials apart", "type": "number", "unit": "px", "default": 0,
@@ -56,6 +56,8 @@
     {"key": "retake", "label": "Retry after BMW pop-ups (off: wait until the cluster is free)", "type": "bool", "default": false},
     {"key": "demo", "label": "Demo data on the cluster", "type": "choice", "default": "off",
      "options": [["off", "Never"], ["on", "Always (parked testing only)"]]},
+    {"key": "renderer", "label": "Renderer", "type": "choice", "default": "software", "reset": 1, "hidden": true,
+     "options": [["software", "Software"]]},
     {"key": "theme", "label": "Colour theme", "type": "choice", "default": "amber",
      "options": [["m_red", "M Red"], ["m_tricolour", "M Tricolour"], ["ice", "Ice White"], ["amber", "Night Amber"]]}
   ]

@@ -2,7 +2,9 @@
 
 Classic BMW round dials with orange needles on the instrument cluster of an iDrive 7 car (MGU head unit, Live Cockpit
 Professional cluster): a speedometer with a fuel gauge, a tachometer with an oil-temperature gauge, the warm-up
-segments that go out as the oil warms, and two LCD windows for digital speed and gear.
+segments that go out as the oil warms, two LCD windows for digital speed and gear, and a centre panel with the clock,
+range and odometer. By default the stock gauges are hidden behind a black background while the dials are on; BMW's
+warning and indicator lights are drawn by the cluster above it.
 
 ![The cluster](docs/cluster.png)
 
@@ -82,9 +84,14 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which othe
 
 ## Settings
 
-Show on the cluster; mph or km/h; °F or °C; classic orange or white dial lighting; redline (7000 for a B58); the needle
+Show on the cluster; stock cluster hidden (default) or showing between the dials; mph or km/h; °F or °C; classic orange or white dial lighting; redline (7000 for a B58); the needle
 sweep at start; dials only or black sides; tank size (59 l for a G20 M340i); moving the dials apart, together, up or
-down; demo data on the cluster (never, by default).
+down; retry after BMW pop-ups (off); demo data on the cluster (never, by default).
+
+The app's own screen in the head unit always uses the HMI's own image (software rendering), never the Store's GPU
+renderer. Version 0.1.0 let the kit switch to the GPU renderer once it found it running, which put a blank surface
+over the app's screen and took the iDrive controller with it; 0.2.0 fixes that. If that blank screen ever shows
+again, press the controller's MENU or HOME button, or hold the volume knob down until the head unit restarts.
 
 ## Before you drive with it
 
@@ -93,8 +100,12 @@ down; demo data on the cluster (never, by default).
   park.
 - **Warning lights.** cluster-render's notes say the panel is drawn under the telltales (checked on one car, not on
   yours). Check anyway: with the dials on, turn the indicators on and look for the seat-belt, brake and check-engine
-  lights at start. If any is hidden, switch the app off. "Black sides" covers more of the cluster; use it only after
-  checking this.
+  lights at start. If any is hidden, switch the app off.
+- **What hiding the stock cluster also hides.** The black background covers everything the cluster draws under the
+  panel: the stock speedometer and tach, the centre area (navigation, media, the trip computer) and, possibly, Check
+  Control message texts and cruise-control and driver-assist displays there. The warning lights stay above it. When
+  BMW's own content takes the slot (a door-open warning, for one), the stock cluster shows until it goes. If you rely
+  on adaptive cruise or lane-keeping displays, set *Stock cluster* to *Shows between the dials*.
 - **Speed.** The needle and the LCD show the car's own vehicle speed as sent on the bus. The stock speedometer
   reads a little high on purpose (the law lets it over-read, never under-read); this one shows that value without the
   margin, so expect it to read about 1-3 mph lower than the stock one at highway speeds.
