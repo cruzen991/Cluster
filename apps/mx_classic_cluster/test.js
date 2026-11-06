@@ -72,7 +72,7 @@ console.log('classic cluster self-check ok');
 
 /* the centre panel, and the app forcing the software screen (the GPU overlay was the blank-screen bug) */
 {
-    assert.strictEqual(F.centerInfo('10:42', '312 mi', '23817 mi').d.length, F.CENTER.w * F.CENTER.h * 4);
+    assert.strictEqual(F.centerInfo('312 mi', '23817 mi').d.length, F.CENTER.w * F.CENTER.h * 4);
     const spec = require('./app.json');
     const r = spec.settings.find((x) => x.key === 'renderer');
     assert(r && r.default === 'software' && r.hidden && r.reset, 'the screen stays on the software path');
@@ -113,7 +113,8 @@ console.log('classic cluster self-check ok');
     ['sport', 'classic'].forEach((st) => {
         assert.strictEqual(F.speedoFace({ style: st, units: 'mph' }).d.length, F.D * F.D * 4);
         assert.strictEqual(F.tachFace({ style: st, redline: 7000, max: 8000, tempUnit: 'f' }).d.length, F.D * F.D * 4);
-        assert.strictEqual(F.centerInfo('9:41', '300 mi', '1 mi', { style: st, mode: 'Sport Plus' }).d.length, F.CENTER.w * F.CENTER.h * 4);
+        assert.strictEqual(F.centerInfo('300 mi', '1 mi', { style: st, mode: 'Sport Plus' }).d.length, F.CENTER.w * F.CENTER.h * 4);
+        assert.strictEqual(F.centerSpeed('88', 'mph', { style: st }).d.length, F.CSPEED.w * F.CSPEED.h * 4);
         assert.strictEqual(F.lcd('88', 'mph', { style: st }).d.length, F.LCD.w * F.LCD.h * 4);
         const fs = F.needleShader({ w: 100, h: 100, px: 50, py: 50, len: 40, tail: 10, wid: 6, col: F.style(st).rgb });
         assert(!/NaN|undefined/.test(fs));

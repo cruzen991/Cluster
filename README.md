@@ -2,8 +2,8 @@
 
 Classic BMW round dials with orange needles on the instrument cluster of an iDrive 7 car (MGU head unit, Live Cockpit
 Professional cluster): a speedometer with a fuel gauge, a tachometer with an oil-temperature gauge, the warm-up
-segments that go out as the oil warms, two LCD windows for digital speed and gear, and a centre panel with the clock,
-range and odometer. By default the stock gauges are hidden behind a black background while the dials are on; BMW's
+segments that go out as the oil warms (off by default), two LCD windows for digital speed and gear, and a centre panel
+with the drive mode, the speed, the range and the odometer. By default the stock gauges are hidden behind a black background while the dials are on; BMW's
 warning and indicator lights are drawn by the cluster above it.
 
 ![The sport style](docs/cluster.png)
@@ -13,7 +13,7 @@ warning and indicator lights are drawn by the cluster above it.
 Two gauge styles (Settings → *Gauge style*): **Sport** (the default: rimless faces, white markings, red needles, a
 large white digital speed) and **Classic** (the first design: chrome rings, orange markings, orange-red needles). Both
 read 0-160 mph by default (0-260 km/h in km/h). The centre panel shows the current drive mode as text (Comfort,
-Sport, Sport Plus, Eco Pro, ...), the clock, the range and the odometer.
+Sport, Sport Plus, Eco Pro, ...), the speed in large figures, the range and the odometer.
 
 It is an app for the [MGU Store](https://github.com/robertnisipeanu/mgu-store). It draws through
 [cluster-render](https://github.com/robertnisipeanu/idrive-apps/tree/main/native/cluster-render) on the cluster's
@@ -82,7 +82,7 @@ The app's own loop catches its errors, but a freeze is not something it can see 
 |---|---|
 | Speedometer, 0-160 mph (inner km/h scale) or 0-260 km/h | `Vehicle2.statusCarSpeed2` |
 | Tachometer, scale to redline + 500 rpm, red from the redline | `CDS.statusEngineSpeed2` |
-| Warm-up segments: lit from the rpm allowed now to the redline; all lit at 40 °C oil or colder, none from 80 °C | `CDS.statusEngineTemperature` (oil) |
+| Warm-up segments (setting *Warm-up lights on the tach*, off by default): lit from the rpm allowed now to the redline; all lit at 40 °C oil or colder, none from 80 °C | `CDS.statusEngineTemperature` (oil) |
 | Oil temperature, 120-300 °F or 50-150 °C | `CDS.statusEngineTemperature` |
 | Fuel, 0-1/1 | `KombiIF.statusRangeTankStatus` (litres) over the tank size setting |
 | Gear LCD: P, R, N, D1-D8 | `VehicleInformation.statusGearboxDrive` / `DataPowerTrain2` |

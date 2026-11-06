@@ -43,6 +43,7 @@ mgu.run({
             demo: settings.get('demo') === 'on',
             retake: settings.get('retake') === true,
             style: settings.get('style') === 'classic' ? 'classic' : 'sport',
+            warmup: settings.get('warmup') === true,
             needles: ['image', 'sharp', 'redraw'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'shader',
         });
 

@@ -150,7 +150,7 @@ class ClassicCluster {
     build() {
         const s = this.getSettings();
         const L = layout(s.dx, s.dy);
-        const key = JSON.stringify([s.style, s.units, s.illum, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
+        const key = JSON.stringify([s.warmup, s.style, s.units, s.illum, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake]);
         if (!this.cr || key === this.faceKey) return;
         const first = !this.faceKey;
         this.faceKey = key;
@@ -173,7 +173,9 @@ class ClassicCluster {
             const black = new F.Canvas(16, 16).clear('#000000');
             R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: 16, ih: 16 });
             cr.pixels(R.back, null, buf(black));
-            R.center = img({ z: 1, x: Math.round(W / 2 - F.CENTER.w / 2), y: Math.round(H / 2 - F.CENTER.h / 2), w: F.CENTER.w, h: F.CENTER.h });
+            const cx0 = Math.round(W / 2 - F.CENTER.w / 2), cy0 = Math.round(H / 2 - F.CENTER.h / 2);
+            R.center = img({ z: 1, x: cx0, y: cy0, w: F.CENTER.w, h: F.CENTER.h });
+            R.lcdCenter = img({ z: 2, x: cx0 + Math.round((F.CENTER.w - F.CSPEED.w) / 2), y: cy0 + F.CSPEED.y, w: F.CSPEED.w, h: F.CSPEED.h });
             this.centerText = null;
         }
 
@@ -186,14 +188,14 @@ class ClassicCluster {
         const lcdX = (cx) => cx - F.LCD.w / 2, lcdY = (cy) => cy - C + F.LCD.y;
         R.lcdSpeed = img({ z: 1, x: lcdX(L.speedo.cx), y: lcdY(L.speedo.cy), w: F.LCD.w, h: F.LCD.h });
         R.lcdGear = img({ z: 1, x: lcdX(L.tach.cx), y: lcdY(L.tach.cy), w: F.LCD.w, h: F.LCD.h });
-        this.lcdText = { speed: null, gear: null };
+        this.lcdText = { speed: null, gear: null, center: null };
 
-        // warm-up segments: one per 250 rpm over the 2500 rpm below the redline
+        // warm-up segments (setting "Warm-up lights", off by default): one per 250 rpm over the 2500 rpm below the redline
         // (each drawn already turned, so no layer here is turned by the renderer)
         R.segs = [];
         this.segRpm = [];
         const max = tachMax(s.redline);
-        for (let v = s.redline - 2500; v < s.redline; v += 250) {
+        for (let v = s.redline - 2500; s.warmup && v < s.redline; v += 250) {
             const a = F.angleOf(v + 125, 0, max);
             const [x, y] = F.pol(L.tach.cx, L.tach.cy, F.SEG.r, a);
             const ref = img({ z: 1, x: Math.round(x - F.SEG.box / 2), y: Math.round(y - F.SEG.box / 2), w: F.SEG.box, h: F.SEG.box,
@@ -266,7 +268,7 @@ class ClassicCluster {
         this.groups = {};
         const g = (name, refs) => refs.forEach((ref) => { if (ref) this.groups[ref] = name; });
         g('background', [R.back]); g('centre', [R.center]); g('dials', [R.speedo, R.tach]);
-        g('lcds', [R.lcdSpeed, R.lcdGear]); g('segments', R.segs);
+        g('lcds', [R.lcdSpeed, R.lcdGear, R.lcdCenter]); g('segments', R.segs);
         g('needles', [R.speed, R.rpm, R.fuel, R.oil]); g('hubs', [R.fuelHub, R.oilHub, R.speedHub, R.rpmHub]);
         this.state.layers = {}; this.state.why = {};
         this.sends = 0;
@@ -344,11 +346,15 @@ class ClassicCluster {
         this.lcd('speed', this.refs.lcdSpeed, this.sweep ? '888' : v.speedText, unit, now, s, false);
         this.lcd('gear', this.refs.lcdGear, this.sweep ? '88' : v.gearText, '', now, s, true);
         if (this.refs.center) {
-            const d = new Date(), clock = (d.getHours() % 12 || 12) + ':' + ('0' + d.getMinutes()).slice(-2);
-            const key = [clock, v.rangeText, v.odoText, v.modeText, s.illum, s.style].join('|');
+            const key = [v.rangeText, v.odoText, v.modeText, s.illum, s.style].join('|');
             if (key !== this.centerText) {
                 this.centerText = key;
-                this.cr.pixels(this.refs.center, null, buf(F.centerInfo(clock, v.rangeText || '---', v.odoText || '---', { illum: s.illum, style: s.style, mode: v.modeText || '' })));
+                this.cr.pixels(this.refs.center, null, buf(F.centerInfo(v.rangeText || '---', v.odoText || '---', { illum: s.illum, style: s.style, mode: v.modeText || '' })));
+            }
+            const text = this.sweep ? '888' : (v.speedText == null ? '' : String(v.speedText));
+            if (text !== this.lcdText.center && now - (this.lcdAt.center || 0) >= LCD_MIN_MS) {
+                this.lcdText.center = text; this.lcdAt.center = now;
+                this.cr.pixels(this.refs.lcdCenter, null, buf(F.centerSpeed(text, unit, { illum: s.illum, style: s.style })));
             }
         }
     }

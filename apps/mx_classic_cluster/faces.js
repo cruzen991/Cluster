@@ -371,12 +371,12 @@ function lcd(text, unit, opts) {
 }
 
 /**
- * The centre panel shown when the stock cluster is hidden: a clock, the range and the odometer,
+ * The centre panel shown when the stock cluster is hidden: the drive mode, the range and the odometer,
  * in a classic orange-on-black window. Returns a Canvas of CENTER.w x CENTER.h.
  */
 const CENTER = { w: 360, h: 240 };
 /** opts: { illum, style, mode (the drive mode as text, or '') } */
-function centerInfo(clock, range, odo, opts) {
+function centerInfo(range, odo, opts) {
     const sport = opts && opts.style === 'sport';
     const il = sport ? STYLES.sport.il : ILLUM[(opts && opts.illum) || 'orange'] || ILLUM.orange;
     const rule = sport ? [255, 255, 255, 40] : [255, 145, 36, 60];
@@ -390,7 +390,7 @@ function centerInfo(clock, range, odo, opts) {
     cv.text(mode ? mode.toUpperCase() : 'DRIVE MODE ---', CENTER.w / 2, 42, 28, mode ? il.lcd : il.dim,
         { font: 'bold', align: 'center', literal: true, spacing: 3 });
     cv.fillRect(24, 58, CENTER.w - 48, 2, rule);
-    cv.text(clock, CENTER.w / 2, 134, 64, il.lcd, { font: 'num', align: 'center', literal: true });
+    // the middle (y 62-150) is left empty: the live speed is its own small layer (centerSpeed)
     cv.fillRect(24, 154, CENTER.w - 48, 2, rule);
     cv.text('RANGE', 30, 192, 22, il.dim, { font: 'bold', literal: true });
     cv.text(range, CENTER.w - 30, 192, 32, il.lcd, { font: 'bold', align: 'right', literal: true });
@@ -453,7 +453,19 @@ function tachFaceSport(opts) {
     return cv;
 }
 
+/** The live speed in the middle of the centre panel: CSPEED.w x CSPEED.h, at CSPEED.y in the panel. */
+const CSPEED = { w: 300, h: 88, y: 62 };
+function centerSpeed(text, unit, opts) {
+    const sport = opts && opts.style === 'sport';
+    const il = sport ? STYLES.sport.il : ILLUM[(opts && opts.illum) || 'orange'] || ILLUM.orange;
+    const cv = new Canvas(CSPEED.w, CSPEED.h).clear(sport ? '#050506' : '#0d0b08');
+    cv.text(text, CSPEED.w / 2 + 10, 70, 64, il.lcd, { font: 'num', align: 'right', literal: true });
+    cv.text(unit, CSPEED.w / 2 + 22, 68, 24, il.dim, { font: 'bold', literal: true });
+    return cv;
+}
+
 module.exports = {
+    CSPEED, centerSpeed,
     STYLES, style, CENTER, centerInfo, drawNeedleAt, needleRects, needleShader, needleShade, NEEDLE_RGB,
     Canvas, D, C, R_FACE, R_TICK, A0, A1, SUB, LCD, SEG, ILLUM, NEEDLE,
     angleOf, subAngleOf, pol, speedoFace, tachFace, needle, hub, segment, lcd,
