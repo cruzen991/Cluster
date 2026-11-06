@@ -55,7 +55,7 @@ function field(cv, g, t) {
     cv.fillRect(FX, y, FW, CH, C.hedge);
     G.HOMES.forEach((col, i) => {
         cv.roundRect(sx(col) + 4, y + 4, CW - 8, CH - 6, 8, g.homes[i] ? C.homeLit : C.home);
-        if (g.homes[i]) hopper(cv, sx(col) + CW / 2, y + CH / 2 + 1, 'down', 0.8);
+        if (g.homes[i]) hopper(cv, sx(col) + CW / 2, y + CH / 2 + 1, 'down', 0.75);
     });
 }
 
@@ -99,20 +99,54 @@ function raft(cv, x, y, len, state, t) {
     }
 }
 
-/** The hopper at screen centre (x, y), facing dir, size k (1 = a cell). */
-function hopper(cv, x, y, dir, k) {
-    k = k || 1;
-    const r = 14 * k;
-    // legs, body, eyes towards where it faces
-    const lx = 13 * k, ly = 9 * k;
-    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => cv.arc(x + a * lx, y + b * ly, 0, 5 * k, 0, 360, C.hopper));
-    cv.arc(x, y, 0, r, 0, 360, C.hopper);
-    cv.arc(x, y, 0, r * 0.55, 0, 360, C.hopperHi);
-    const f = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] || [0, -1];
-    const ex = f[0] * 8 * k, ey = f[1] * 8 * k, px = -f[1] * 6 * k, py = f[0] * 6 * k;
-    for (const s of [-1, 1]) {
-        cv.arc(x + ex + s * px, y + ey + s * py, 0, 4.5 * k, 0, 360, C.eye);
-        cv.arc(x + ex * 1.15 + s * px, y + ey * 1.15 + s * py, 0, 2.2 * k, 0, 360, C.pupil);
+/**
+ * The frog at screen centre (x, y), facing dir, size k (1 = about a cell); leap 0..1 stretches the
+ * back legs out behind it (mid-hop). Seen from above: a pear-shaped body with a light stripe and dark
+ * spots, bulging golden eyes, folded back legs with webbed feet, short front legs. Drawn in its own
+ * frame (forward = up) and turned to face dir; every part is outlined in dark green first so it
+ * reads on the road, the logs and the water alike.
+ */
+const FROG = { body: '#4fb83e', dark: '#1f5a18', light: '#9be872', spot: '#2f7d26', iris: '#f0d040', pupil: '#101010' };
+function hopper(cv, x, y, dir, k, leap) {
+    k = k || 1; leap = leap || 0;
+    const T = { up: (a, b) => [a, b], down: (a, b) => [-a, -b], left: (a, b) => [b, -a], right: (a, b) => [-b, a] }[dir] || ((a, b) => [a, b]);
+    const P = (a, b) => { const q = T(a, b); return [x + q[0] * k, y + q[1] * k]; };
+    const disc = (a, b, r, c) => { const q = P(a, b); cv.arc(q[0], q[1], 0, r * k, 0, 360, c); };
+    const limb = (pts, w, c) => {
+        const q = pts.map(([a, b]) => P(a, b));
+        cv.polyline(q, w * k, c);
+        q.forEach(([qx, qy]) => cv.arc(qx, qy, 0, w * k / 2, 0, 360, c));     // round joints
+    };
+    const toes = (a, b, spread, c, r) => spread.forEach(([da, db]) => disc(a + da, b + db, r, c));
+    const legs = (c, w, toeR) => {
+        for (const sd of [-1, 1]) {
+            // back leg: folded (hip, knee out and back, foot forward beside the body), or stretched behind
+            const hip = [sd * 6, 7];
+            const knee = [sd * (15 - 5 * leap), 13 + 5 * leap];
+            const foot = [sd * (14 - 4 * leap), 3 + 19 * leap];
+            limb([hip, knee, foot], w, c);
+            toes(foot[0], foot[1], leap > 0.5 ? [[sd * -2, 3], [0, 4], [sd * 2, 3]] : [[sd * 1, -3], [sd * 3.2, -1.5], [sd * 3.2, 1.5]], c, toeR);
+            // front leg
+            const sh = [sd * 6, -5], el = [sd * 12, -7], hand = [sd * 12, -12];
+            limb([sh, el, hand], w * 0.8, c);
+            toes(hand[0], hand[1], [[sd * -1.5, -2.2], [0, -2.8], [sd * 1.5, -2.2]], c, toeR * 0.85);
+        }
+    };
+    // outline pass, then the frog
+    legs(FROG.dark, 6.5, 2.4);
+    disc(0, 3, 11.5, FROG.dark); disc(0, -2, 11, FROG.dark); disc(0, -8, 9.5, FROG.dark);
+    disc(-5.5, -10.5, 5.2, FROG.dark); disc(5.5, -10.5, 5.2, FROG.dark);
+    legs(FROG.body, 4.2, 1.6);
+    disc(0, 3, 10, FROG.body); disc(0, -2, 9.5, FROG.body); disc(0, -8, 8, FROG.body);
+    // back: a light stripe and a few dark spots
+    limb([[0, -9], [0, 9]], 2.6, FROG.light);
+    disc(-4.5, 3, 2.2, FROG.spot); disc(4.8, 5, 2.6, FROG.spot); disc(-3.5, -3.5, 1.7, FROG.spot); disc(4, -2, 1.5, FROG.spot);
+    // eyes: bulges with a golden iris and a dark pupil looking ahead
+    for (const sd of [-1, 1]) {
+        disc(sd * 5.5, -10.5, 4, FROG.body);
+        disc(sd * 5.5, -10.8, 3, FROG.iris);
+        disc(sd * 5.6, -11.6, 1.5, FROG.pupil);
+        disc(sd * 4.6, -12, 0.7, '#ffffff');
     }
 }
 
@@ -136,24 +170,24 @@ function player(cv, g, t) {
     const a = (t - g.hopT) / G.HOP_MS;
     if (g.from && a < 1) {
         x = g.from.x + (g.x - g.from.x) * a; row = g.from.y + (g.y - g.from.y) * a;
-        lift = Math.sin(a * Math.PI) * 0.18;
+        lift = Math.sin(a * Math.PI) * 0.12;
     }
     const cx = sx(x) + CW / 2, cy = FY + (G.ROWS - 1 - row) * CH + CH / 2;
     if (g.state === 'dead') {
         const k = Math.min(1, (t - g.stateT) / 500);
         if (g.deathWhy === 'squash') {
             cv.arc(cx, cy, 0, 16 + 6 * k, 0, 360, '#7a1a12');
-            cv.arc(cx, cy, 0, 9, 0, 360, C.hopper);
+            cv.arc(cx, cy, 0, 9, 0, 360, FROG.body);
         } else {
             for (let i = 0; i < 3; i++) cv.arc(cx, cy, 6 + i * 9 + k * 10, 8 + i * 9 + k * 10, 0, 360, C.waterHi);
         }
         return;
     }
-    hopper(cv, cx, cy, g.dir, 1 + lift);
+    hopper(cv, cx, cy, g.dir, 1 + lift, lift > 0 ? Math.min(1, lift / 0.08) : 0);
 }
 
 function lifeIcons(cv, x, y, n) {
-    for (let i = 0; i < Math.min(n, 6); i++) hopper(cv, x + i * 44, y, 'up', 0.8);
+    for (let i = 0; i < Math.min(n, 6); i++) hopper(cv, x + i * 48, y, 'up', 0.85);
 }
 
 function hud(cv, g, t, info) {
@@ -201,4 +235,4 @@ function frame(cv, g, t, info) {
     return cv;
 }
 
-module.exports = { frame, W, H, CW, CH, FX, FY, FW, FH, C };
+module.exports = { frame, W, H, CW, CH, FX, FY, FW, FH, C, hopper };
