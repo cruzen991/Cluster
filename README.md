@@ -122,6 +122,11 @@ B58); the needle sweep at start; tank size (59 l for a G20 M340i); moving the di
 needles drawn as redrawn images (default), as a rotating layer (Arc style) or by a shader; boost signal gauge or absolute; retry after BMW pop-ups (off); demo data on the cluster
 (never, by default).
 
+The sweep takes about 2.5 s (up, a moment at full scale, back). The one at start waits 2.5 s after the dials show,
+until their first pictures are uploaded (before 0.11.3 it ran at once and the renderer, still busy with that upload,
+dropped its frames: it was never seen). In *Redrawn images* the needle moves 5 times a second, so the sweep steps;
+in *Rotating layer* it is smooth.
+
 The *Needle sweep* button sweeps whatever the *Needle sweep at start* setting says (that setting only controls the
 automatic one); the app's screen says when it runs, or why it did not (the cluster off, or the car moving).
 

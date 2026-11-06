@@ -39,6 +39,9 @@ const ROTATE_FPS = 15;             // rotating mode (arc): the lit arc / lights 
 const ROTATE_MIN_DEG = 0.1;        // and the needle layer turned for a move of at least this
 const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
 const MAX_LAYERS = 8;              // cluster-render's per-client limit
+/* the needle sweep: slow enough that the redrawn mode's 5 pictures a second show it (0.11.2 and
+ * before: 0.8 s up, 0.8 s down, 8 pictures in all, and the one at start lost in the first upload) */
+const SWEEP_UP_MS = 1100, SWEEP_HOLD_MS = 300, SWEEP_DELAY_MS = 2500;
 /* arc style: how often each slow value shown is refreshed (ms); a value that was missing shows at once */
 const SLOW_MS = { oilC: 3000, coolC: 3000, iatC: 2000, outsideC: 120000 };
 const PANEL_MS = 250;
@@ -134,7 +137,13 @@ class ClassicCluster {
             const was = this.state.target;
             this.state.target = state; this.state.reason = reason || (holder && holder !== 'none' ? 'held by ' + holder : '');
             if (state !== was) this.log.info('panel ' + state + (this.state.reason ? ': ' + this.state.reason : ''));
-            if (state === 'shown' && was !== 'shown' && !this.sweptOnce) { this.sweptOnce = true; this.startSweep(true); }
+            // the sweep at start waits SWEEP_DELAY_MS after the panel shows: the first pictures (about
+            // 6 MB) are still being uploaded then, and the renderer drops frames it has no budget for,
+            // so a sweep started at once was never seen
+            if (state === 'shown' && was !== 'shown' && !this.sweptOnce) {
+                this.sweptOnce = true;
+                setTimeout(() => { if (this.cr === cr && this.state.target === 'shown') this.startSweep(true); }, SWEEP_DELAY_MS);
+            }
             if (this.opts.onTarget) this.opts.onTarget(state, holder, reason);
         });
         cr.on('layer', (ref, state, reason) => {
@@ -370,7 +379,7 @@ class ClassicCluster {
     }
 
     /**
-     * The needle sweep: to full scale and back, about 1.6 s. auto: the one at start, which the
+     * The needle sweep: up to full scale (SWEEP_UP_MS), a moment there, and back: about 2.5 s. auto: the one at start, which the
      * "Needle sweep at start" setting controls; the button's sweep runs whatever that setting.
      * Returns why it did not run, or ''.
      */
@@ -396,8 +405,8 @@ class ClassicCluster {
         const speedMax = s.units === 'kmh' ? 260 : 160, rpmMax = tachMax(s.redline);
         let fs = v.speed / speedMax, fr = v.rpm / rpmMax, ff = v.fuel, fo = v.oil, fb = v.boost, rpm = v.rpm;
         if (this.sweep) {
-            const t = (now - this.sweep.t0) / 800;
-            const p = t < 1 ? ease(t) : t < 2 ? 1 - ease(t - 1) : null;
+            const t = now - this.sweep.t0, U = SWEEP_UP_MS, Hd = SWEEP_HOLD_MS;
+            const p = t < U ? ease(t / U) : t < U + Hd ? 1 : t < 2 * U + Hd ? 1 - ease((t - U - Hd) / U) : null;
             if (p === null) this.sweep = null;
             else { fs = fr = ff = fo = fb = p; rpm = p * rpmMax; }
         }
