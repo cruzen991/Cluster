@@ -26,7 +26,9 @@ const TARGET = 'panel';
 const W = 1920, H = 720;
 const FPS = 30;
 const MIN_STEP_DEG = 0.1;
-const LCD_MIN_MS = 200;            // an LCD's text is redrawn at most 5 times a second
+const LCD_MIN_MS = 200;
+const REDRAW_FPS = 8;             // redraw mode: needle updates a second at most
+const REDRAW_PIECES = 8;           // and pieces per needle (old and new: at most 16 rectangles)            // an LCD's text is redrawn at most 5 times a second
 
 /* where the two dials sit on the panel; dx moves both outwards (+) or inwards (-) */
 function layout(dx, dy) {
@@ -210,7 +212,8 @@ class ClassicCluster {
         //   shader  an unturned quad over the needle's sweep; a fragment shader draws the needle at
         //           the angle in the uniform u_a. Moving it sends a uniform.
         //   image   a needle image turned by the renderer about its pivot (the layer's rotate).
-        this.mode = s.needles === 'image' ? 'image' : 'shader';
+        this.mode = ['image', 'sharp', 'redraw'].indexOf(s.needles) >= 0 ? s.needles : 'shader';
+        this.redraw = {};
         const place = (n, cx, cy, z) => {
             if (this.mode === 'shader') {
                 const reach = Math.ceil(Math.max(n.len, n.tail) + 10);
@@ -222,8 +225,23 @@ class ClassicCluster {
                 cr.uniform(ref, 'u_a', [F.A0]);
                 return ref;
             }
+            if (this.mode === 'redraw') {
+                // an unturned image over the needle's sweep, the needle drawn into it here and only the
+                // pieces that changed sent (the kind of layer the dials themselves are)
+                const reach = Math.ceil(Math.max(n.len, n.tail) + 14);
+                const box = Math.min(2 * reach, D);
+                const x = Math.max(0, Math.round(cx - box / 2)), y = Math.max(0, Math.round(cy - box / 2));
+                const w = Math.min(box, W - x), h = Math.min(box, H - y);
+                const cv = new F.Canvas(w, h);
+                const r = { cv, px: cx - x, py: cy - y, n, ang: F.A0, at: 0 };
+                F.drawNeedleAt(cv, r.px, r.py, F.A0, n.len, n.tail, n.wid, REDRAW_PIECES);
+                const ref = img({ z, x, y, w, h });
+                cr.pixels(ref, null, buf(cv));
+                this.redraw[ref] = r;
+                return ref;
+            }
             const ref = img({ z, x: Math.round(cx - n.px), y: Math.round(cy - n.py), w: n.w, h: n.h,
-                px: n.px, py: n.py, rotate: F.A0, sampling: 'bilinear' });
+                px: n.px, py: n.py, rotate: F.A0, sampling: this.mode === 'sharp' ? 'nearest' : 'bilinear' });
             cr.pixels(ref, null, buf(n.cv));
             return ref;
         };
@@ -264,6 +282,7 @@ class ClassicCluster {
         if (auto && !this.getSettings().sweep) return 'off in the settings';
         if (!this.enabled || !this.cr) return 'the cluster is off';
         if (this.values.live && this.values.speed > 1) return 'not while moving';     // never while moving
+        if (this.mode === 'redraw') return 'not with redrawn needles (too much data)';
         this.sweep = { t0: Date.now() };
         this.log.info('needle sweep');
         return '';
@@ -293,6 +312,13 @@ class ClassicCluster {
 
         const send = (k, ang) => {
             if (n[k].sent !== null && Math.abs(n[k].sent - ang) < MIN_STEP_DEG) return;
+            if (this.mode === 'redraw') {
+                const r = this.redraw[this.refs[k]];
+                if (!r || (now - r.at < 1000 / REDRAW_FPS) || Math.abs(r.ang - ang) < 0.3) return;
+                n[k].sent = ang; this.sends++;
+                this.redrawNeedle(this.refs[k], r, ang, now);
+                return;
+            }
             n[k].sent = ang;
             this.sends++;
             const deg = Math.round(ang * 100) / 100;
@@ -323,6 +349,34 @@ class ClassicCluster {
                 this.cr.pixels(this.refs.center, null, buf(F.centerInfo(clock, v.rangeText || '---', v.odoText || '---', { illum: s.illum })));
             }
         }
+    }
+
+    /** Redraw mode: clear where the needle was, draw it where it is, send only those pieces. */
+    redrawNeedle(ref, r, ang, now) {
+        const n = r.n, cv = r.cv, d = cv.d;
+        const clip = (q) => {
+            const x0 = Math.max(0, q.x), y0 = Math.max(0, q.y), x1 = Math.min(cv.w, q.x + q.w), y1 = Math.min(cv.h, q.y + q.h);
+            return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+        };
+        const old = F.needleRects(r.px, r.py, r.ang, n.len, n.tail, n.wid, REDRAW_PIECES);
+        const now2 = F.needleRects(r.px, r.py, ang, n.len, n.tail, n.wid, REDRAW_PIECES);
+        // one rectangle per piece where the old and the new piece overlap enough, else both
+        let rects = [];
+        old.forEach((a, i) => {
+            const b = now2[i], u = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) };
+            u.w = Math.max(a.x + a.w, b.x + b.w) - u.x; u.h = Math.max(a.y + a.h, b.y + b.h) - u.y;
+            if (u.w * u.h <= 1.5 * (a.w * a.h + b.w * b.h)) rects.push(u); else rects.push(a, b);
+        });
+        rects = rects.map(clip).filter(Boolean);
+        rects.forEach((q) => { for (let y = q.y; y < q.y + q.h; y++) d.fill(0, (y * cv.w + q.x) * 4, (y * cv.w + q.x + q.w) * 4); });
+        F.drawNeedleAt(cv, r.px, r.py, ang, n.len, n.tail, n.wid, REDRAW_PIECES);
+        r.ang = ang; r.at = now;
+        const bytes = rects.reduce((t, q) => t + q.w * q.h * 4, 0);
+        if (rects.length > 16) { this.cr.pixels(ref, null, buf(cv)); return; }
+        const out = Buffer.alloc(bytes);
+        let off = 0;
+        rects.forEach((q) => { for (let y = q.y; y < q.y + q.h; y++) { Buffer.from(d.buffer, d.byteOffset + (y * cv.w + q.x) * 4, q.w * 4).copy(out, off); off += q.w * 4; } });
+        this.cr.pixels(ref, rects, out);
     }
 
     lcd(key, ref, text, unit, now, s, center) {

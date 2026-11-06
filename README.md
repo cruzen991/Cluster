@@ -144,15 +144,19 @@ the Waze map, the one thing checked on cars, also is. The faces are drawn once (
 within cluster-render's shared link budget); only the LCD windows and the centre panel are redrawn, about 200 KB/s
 while the speed changes.
 
-The needles, two ways (setting *Needles drawn by*):
+The needles, four ways (setting *Needles drawn by*):
 
 - **Shader (default):** each needle is an unturned quad over its sweep; a fragment shader draws it at the angle in
-  one uniform, so moving a needle sends a few bytes.
-- **Turned images:** a needle image the renderer turns about its pivot (the layer's `rotate`).
+  one uniform, so moving a needle sends a few bytes. Smooth.
+- **Redrawn images:** the needle is drawn by the app into an unturned image over its sweep, and only the pieces that
+  changed are sent, at most 8 times a second. Uses only the kind of layer the dials are, so it is the safest bet, but
+  it is choppier and heavy on the link (about 2 MB/s with the needles moving all the time), and has no sweep.
+- **Turned images, sharp / smooth:** a needle image the renderer turns about its pivot, sampled nearest or bilinear.
 
-In version 0.2.0 the needles were turned images only, and on the first car test they did not show; turned layers are
-checked in cluster-render's emulator, not on a car's cluster. Neither way is checked on a car yet. If one shows no
-needles, try the other.
+What the first car test showed (0.2.0, turned images, smooth): the dials, LCDs, centre panel and background showed,
+the needles did not. So either the cluster does not draw turned layers, or it does not draw bilinear sampling. The
+sharp option tells those two apart; the shader and redrawn options avoid both. Try them in this order: shader,
+redrawn, sharp.
 
 **Diagnostics.** With the cluster on, the bottom of the app's screen lists, per group of layers (background, centre,
 dials, lcds, segments, needles, hubs), what cluster-render reports for them (shown, waiting, stalled, hidden, error)

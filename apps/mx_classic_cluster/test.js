@@ -91,3 +91,16 @@ console.log('classic cluster self-check ok');
     assert.strictEqual(F.segment(30).w, F.SEG.box);
     console.log('needle self-check ok');
 }
+
+/* redrawn needles: the pieces sent cover every pixel the needle drew, at any angle */
+{
+    for (const ang of [-125, -90, -37, 0, 12.5, 45, 90, 125]) {
+        const cv = new F.Canvas(580, 580);
+        const rects = F.drawNeedleAt(cv, 290, 290, ang, 270, 62, 15, 8);
+        for (let y = 0; y < cv.h; y++) for (let x = 0; x < cv.w; x++) {
+            if (!cv.d[(y * cv.w + x) * 4 + 3]) continue;
+            assert(rects.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h), 'pixel ' + x + ',' + y + ' at ' + ang + ' outside the pieces');
+        }
+    }
+    console.log('redraw self-check ok');
+}

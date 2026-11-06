@@ -40,7 +40,7 @@ mgu.run({
             dy: Number(settings.get('dy')) || 0,
             demo: settings.get('demo') === 'on',
             retake: settings.get('retake') === true,
-            needles: settings.get('needles') === 'image' ? 'image' : 'shader',
+            needles: ['image', 'sharp', 'redraw'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'shader',
         });
 
         // fuel: litres in the tank from the cluster's own range / tank status

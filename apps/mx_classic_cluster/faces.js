@@ -252,6 +252,34 @@ function needleShade(sp, x, y, ang) {
     return [...(body > 0 ? col : NEEDLE_RGB.glow), al * 255];
 }
 
+/**
+ * A needle drawn straight into a canvas at angle ang (degrees clockwise), pivot (px, py): for
+ * needles redrawn as unturned images. Returns the rectangles (x, y, w, h, unclipped) that
+ * together cover everything it drew: `n` pieces along its length.
+ */
+function drawNeedleAt(cv, px, py, ang, len, tail, wid, n) {
+    const a = ang * RAD, c = Math.cos(a), s = Math.sin(a);
+    const T = (x, y) => [px + x * c - y * s, py + x * s + y * c];
+    const tipW = Math.max(2.5, wid * 0.28);
+    const body = (g) => [[-tipW / 2 - g, -len - g * 0.5], [tipW / 2 + g, -len - g * 0.5], [wid / 2 + g, 0],
+        [wid * 0.7 + g, tail + g * 0.5], [-wid * 0.7 - g, tail + g * 0.5], [-wid / 2 - g, 0]].map((q) => T(q[0], q[1]));
+    convexPoly(cv, body(0), NEEDLE.edge);
+    convexPoly(cv, body(-1.2), NEEDLE.core);
+    return needleRects(px, py, ang, len, tail, wid, n);
+}
+/** The rectangles covering a needle at ang (see drawNeedleAt). */
+function needleRects(px, py, ang, len, tail, wid, n) {
+    const a = ang * RAD, c = Math.cos(a), s = Math.sin(a);
+    const m = wid * 0.7 + 3, out = [];
+    for (let i = 0; i < n; i++) {
+        const y0 = -len - 4 + (len + tail + 8) * i / n, y1 = -len - 4 + (len + tail + 8) * (i + 1) / n;
+        const xa = px - y0 * s, ya = py + y0 * c, xb = px - y1 * s, yb = py + y1 * c;
+        const x = Math.floor(Math.min(xa, xb) - m), y = Math.floor(Math.min(ya, yb) - m);
+        out.push({ x, y, w: Math.ceil(Math.max(xa, xb) + m) - x, h: Math.ceil(Math.max(ya, yb) + m) - y });
+    }
+    return out;
+}
+
 /** convex() takes convex polygons: the needle outline is split into two convex halves. */
 function convexPoly(cv, p, c) {
     cv.convex([p[0], p[1], p[2], p[5]], c);
@@ -324,7 +352,7 @@ function centerInfo(clock, range, odo, opts) {
 }
 
 module.exports = {
-    CENTER, centerInfo, needleShader, needleShade, NEEDLE_RGB,
+    CENTER, centerInfo, drawNeedleAt, needleRects, needleShader, needleShade, NEEDLE_RGB,
     Canvas, D, C, R_FACE, R_TICK, A0, A1, SUB, LCD, SEG, ILLUM, NEEDLE,
     angleOf, subAngleOf, pol, speedoFace, tachFace, needle, hub, segment, lcd,
 };
