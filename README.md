@@ -63,6 +63,34 @@ artwork. **Parked only** by default (it pauses while the car moves; setting *Par
 - **Status: untested on a car.** Tested on a PC: its rules and controls with `node apps/mx_road_hopper/test.js`, a
   bot that plays it (reaching homes on every speed), and the kit's desk preview with the GPU renderer stand-in.
 
+## Shift HUD
+
+A third app: **shift lights, the gear and boost on the head-up display** ([picture](docs/shift-hud.png): 5,400 rpm
+left, the redline flash right). An original design ("Arc"): a curved band of 12 lights across the top, green, then
+yellow, then red, each lit one with a soft glow and the unlit ones faint grey; the gear large under it; boost in
+whole psi under the gear. On the HUD black is see-through, so only the lit parts float on the glass.
+
+- **Shift lights:** the first comes on 2,500 rpm below the redline (setting *Shift lights start below the
+  redline*), one more every ~208 rpm, all 12 lit just under it, and from the redline (setting *Redline*, 7,000)
+  all of them flash red about 4.5 times a second (setting *Flash at the redline*). A light goes out only 60 rpm
+  under its point, so it doesn't flicker on the edge.
+- **When:** always while the car sends data, or (setting *When*) only in Sport, Sport Plus or Sport Individual.
+  No data for 3 s hides it; demo data never reaches the HUD unless *Demo data on the HUD* is on.
+- **Where:** cluster-render's `hud` target, 800x480, the HUD's slot 0x323 above BMW's own speed bar (the slot the
+  HUD map of other apps uses). It never takes the slot from BMW's own content: with BMW's HUD map or a pop-up
+  there, it waits. BMW's speed and warnings stay where they are.
+- **One at a time with Classic Cluster:** the HUD and the cluster's `panel` target share one scene in
+  cluster-render, so it never shows both. With Classic Cluster on, the HUD waits; turn Classic Cluster off
+  (its *Cluster on / off*) to use the HUD.
+- **Light on the link:** six still image layers, sent once (about 1.5 MB at start). The lights move by the
+  renderer turning a cover layer about the band's centre (one small message a light, no pixels); the flash shows
+  and hides a layer (no pixels); a gear change sends the gear's rectangle (about 60 KB); boost the changed figures
+  (about 10 KB, at most 4 times a second).
+- **Its screen** shows what the HUD shows, and its state (*On the HUD*, *Waiting for the HUD* and why).
+- **Status: untested on a car.** Tested on a PC: `node apps/mx_shift_hud/test.js` (the light points, the
+  hysteresis, the flash, the cover turned as the renderer turns it leaving exactly the right lights lit, the
+  traffic per rev sweep and per upshift), and against the cluster-render stand-in on the `hud` target.
+
 
 ## Install
 
@@ -199,6 +227,10 @@ again, press the controller's MENU or HOME button, or hold the volume knob down 
 | `apps/mx_classic_cluster/guard.js` | turns the cluster off by itself after repeated failures (above) |
 | `apps/mx_classic_cluster/cluster_render_client.js` | cluster-render's Node client (MPL-2.0, unchanged) |
 | `apps/mx_classic_cluster/test.js` | `node apps/mx_classic_cluster/test.js` |
+| `apps/mx_shift_hud/art.js` | the Shift HUD's pictures: the band of lights, the cover and mask, the gear, boost |
+| `apps/mx_shift_hud/hud.js` | its layers on the HUD through cluster-render, the cover's turn, the flash |
+| `apps/mx_shift_hud/main.js` | the app: car data, settings, its own screen |
+| `apps/mx_shift_hud/test.js` | `node apps/mx_shift_hud/test.js` |
 | `kit/runtime/fonts/orb*.json` | Orbitron, baked for the kit's canvas (SIL Open Font License, `OFL-Orbitron.txt`) |
 | `kit/` | the app kit from [cauliflowermossgrape/idrive7-apps](https://github.com/cauliflowermossgrape/idrive7-apps) (MIT) |
 
