@@ -232,7 +232,9 @@ for (const st of ['tech']) {
         const [lx, ly] = top(340, a);                       // shift lights, red zone only (right side)
         if (a > 20 && lx > 740 && lx < 1180) assert(ly > 125, 'shift light under the camera');
     }
-    assert(N.cy + 222 * k < 640, 'the rpm label clears the strip');
+    assert(N.cy + 192 * k < N.strip.y, 'the rpm label clears the strip');
+    assert(N.dial.y + N.dial.h <= 720 && N.dial.y >= 0, 'the dial inside the panel');
+    assert(N.cy - A.R * k >= 190, 'ticks well below the camera');
     const F0 = A.arcLayout(0, false);
     assert.strictEqual(F0.scale, 1); assert(!F0.dial.iw, 'full size: no stretch');
 }
@@ -295,8 +297,8 @@ for (const st of ['tech']) {
     assert.deepStrictEqual(spec.settings.find((x) => x.key === 'style').options.map((o) => o[0]).sort(), ['arc', 'tech'], 'only the Arc and Tech styles');
     assert(!spec.settings.some((x) => x.key === 'illum'));
     assert(spec.config.dme.iat.length >= 1 && spec.signals['de.bmw.infrastructure.EnvironmentalInformation']._optional);
-    assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "redraw");
-    assert.deepStrictEqual(spec.settings.find((x) => x.key === 'needles').options.map((o) => o[0]), ['redraw', 'rotate', 'shader']);
+    assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "shader");
+    assert.deepStrictEqual(spec.settings.find((x) => x.key === 'needles').options.map((o) => o[0]), ['shader', 'rotate', 'redraw']);
     assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
 }
 

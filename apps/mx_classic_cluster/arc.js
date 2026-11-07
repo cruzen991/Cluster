@@ -25,7 +25,7 @@ let fonts, rgba;
 try { fonts = require('./kit/fonts'); ({ rgba } = require('./kit/canvas')); } catch (e) { fonts = require('../../kit/runtime/fonts'); ({ rgba } = require('../../kit/runtime/canvas')); }
 
 const RAD = Math.PI / 180;
-const DW = 720, DH = 720;                 // the dial image
+const DW = 720, DH = 600;                 // the dial image (nothing is drawn below DCY + 190)
 const DCX = 360, DCY = 372;               // its pivot
 const R = 300;                            // outer end of the ticks
 const R_NUM = 226;                        // numerals
@@ -50,7 +50,7 @@ const ORANGE = [255, 122, 26], WHITE = '#f5f6f8', DIM = '#7a8088', FAINT = '#343
  * pictures, stretched smaller by the renderer, bilinear) with the pivot NOTCH_CY down, which
  * clears the camera with the ticks and keeps the bottom clear of the strip.
  */
-const NOTCH_SCALE = 0.8, NOTCH_CY = 404;
+const NOTCH_SCALE = 0.9, NOTCH_CY = 470;   // 0.12.0: larger and lower than 0.11.4's 0.8 at 404 (still under the camera's edge)
 function arcLayout(dy, notch) {
     const y = dy || 0, k = notch ? NOTCH_SCALE : 1, cy = y + (notch ? NOTCH_CY : DCY);
     const sized = (w, h, px, py) => Object.assign({ x: Math.round(960 - px * k), y: Math.round(cy - py * k), w: Math.round(w * k), h: Math.round(h * k) },
@@ -61,7 +61,7 @@ function arcLayout(dy, notch) {
         centre: sized(300, 300, 150, 150),
         left: { x: 50, y: y + 96, w: 540, h: 500 },
         right: { x: 1920 - 50 - 540, y: y + 96, w: 540, h: 500 },
-        strip: { x: 560, y: y + 640, w: 800, h: 76 },
+        strip: { x: 560, y: y + 668, w: 800, h: 52 },
     };
 }
 
@@ -92,7 +92,7 @@ function arcFace(opts) {
     // the track the lit arc runs in, and the disc under the gear
     cv.arc(DCX, DCY, R_PROG - W_PROG / 2, R_PROG + W_PROG / 2, A0, A1, '#1c1e22');
     cv.arc(DCX, DCY, 0, R_INNER, 0, 360, '#090a0c');
-    cv.text('x1000 RPM', DCX + 150, DCY + 222, 18, DIM, { font: 'orbm', align: 'center', literal: true });
+    cv.text('x1000 RPM', DCX + 150, DCY + 186, 18, DIM, { font: 'orbm', align: 'center', literal: true });
     return cv;
 }
 
@@ -390,12 +390,18 @@ function drawRight(p, v) {
 
 /** The bottom strip. v: { outside, mode, intake (strings) } */
 function drawStrip(p, v) {
+    // 0.12.0: smaller (20 px, was 26) and the drive mode's cell wider (360 px), so "SPORT PLUS" fits;
+    // a mode name that still wouldn't is drawn smaller rather than cut
     p.cell('rule', { x: 0, y: 0, w: 800, h: 6 }, 'x', (cv) => cv.fillRect(0, 2, 800, 2, FAINT));
-    p.cell('out', { x: 0, y: 8, w: 270, h: 66 }, v.outside, (cv) => cv.text(v.outside, 140, 52, 26, WHITE, { font: 'orb', align: 'center', literal: true }));
-    p.cell('mode', { x: 270, y: 8, w: 260, h: 66 }, v.mode, (cv) => cv.text(v.mode, 400, 52, 26, ORANGE, { font: 'orb', align: 'center', literal: true, spacing: 6 }));
-    p.cell('iat', { x: 530, y: 8, w: 270, h: 66 }, v.intake, (cv) => {
-        cv.text('INTAKE', 640, 52, 16, DIM, { font: 'orbm', align: 'right', literal: true, spacing: 3 });
-        cv.text(v.intake, 652, 52, 26, WHITE, { font: 'orb', literal: true });
+    p.cell('out', { x: 0, y: 8, w: 220, h: 44 }, v.outside, (cv) => cv.text(v.outside, 110, 38, 20, WHITE, { font: 'orb', align: 'center', literal: true }));
+    p.cell('mode', { x: 220, y: 8, w: 360, h: 44 }, v.mode, (cv) => {
+        let size = 20;
+        while (size > 12 && cv.textWidth(v.mode, size, { font: 'orb', literal: true, spacing: 3 }) > 340) size -= 2;
+        cv.text(v.mode, 400, 38, size, ORANGE, { font: 'orb', align: 'center', literal: true, spacing: 3 });
+    });
+    p.cell('iat', { x: 580, y: 8, w: 220, h: 44 }, v.intake, (cv) => {
+        cv.text('INTAKE', 676, 38, 13, DIM, { font: 'orbm', align: 'right', literal: true, spacing: 2 });
+        cv.text(v.intake, 686, 38, 20, WHITE, { font: 'orb', literal: true });
     });
 }
 

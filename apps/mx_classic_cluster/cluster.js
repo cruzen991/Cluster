@@ -35,6 +35,11 @@ const FPS = 30;
 const MIN_STEP_DEG = 0.1;
 const LCD_MIN_MS = 200;            // an LCD's text is redrawn at most 5 times a second
 const REDRAW_FPS = 5;              // redrawn mode: dial updates a second at most (each costs CPU)
+/* Smooth motion: the needle's turn (rotating layer) and the shader's u_v are sent as renderer
+ * animations - from where it is to where it is going over ANIM_MS - and the renderer plays them on
+ * the cluster's own clock, every frame. Before 0.12.0 each step was a set / uniform in the renderer's
+ * next flush, and a flush waits for that tick's pixel uploads: the needle moved in jerks. */
+const ANIM_MS = 100;
 const ROTATE_FPS = 15;             // rotating mode (arc): the lit arc / lights / numerals redrawn up to this often; tiny rectangles
 const ROTATE_MIN_DEG = 0.1;        // and the needle layer turned for a move of at least this
 const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
@@ -452,8 +457,11 @@ class ClassicCluster {
             const lv2 = A.numeralLevels(rpm, d.nums.length);
             const changed = [];
             lv2.forEach((k, i) => { if (k !== d.levels[i]) changed.push(i); });
-            // rotating mode: the needle layer turns every tick (30 a second), a message of a few bytes
-            if (d.needle && Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG) { this.cr.set(d.needle, { rotate: round2(a) }); d.needleAt = a; this.sends++; }
+            // rotating mode: the needle layer glides to where it's going (a renderer animation, ANIM_MS)
+            if (d.needle && Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG && now - (d.needleAnimAt || 0) >= ANIM_MS) {
+                this.glide(d.needle, 'rotate', [round2(d.needleAt)], [round2(a)]);
+                d.needleAt = a; d.needleAnimAt = now; this.sends++;
+            }
             if (this.mode === 'shader') {
                 this.dialState('tach', st, now);
                 if (changed.length && now - d.numAt >= 1000 / 10) {
@@ -500,6 +508,27 @@ class ClassicCluster {
         }
     }
 
+    /**
+     * Move a layer's property from `from` to `to` over ANIM_MS, played by the renderer. One animation
+     * per layer and property, replaced each time (the same number: "sending it again replaces it"), so
+     * a layer never collects more than its 16; the property is also set to `from` first, which is where
+     * it goes back to if an animation is ever dropped.
+     */
+    glide(ref, property, from, to, name) {
+        const cr = this.cr;
+        if (property === 'rotate') cr.set(ref, { rotate: from[0] });
+        else cr.uniform(ref, name, from);
+        const keys = '0:' + from.join(',') + ' ' + ANIM_MS + ':' + to.join(',');
+        this.anims = this.anims || {};
+        const k = ref + ':' + property, n = this.anims[k];
+        const l = cr.layers && cr.layers.get(ref);
+        if (n && l && l.anims && l.anims.has(n)) {
+            const m = Object.assign({}, l.anims.get(n), { keys });
+            l.anims.set(n, m);                       // so a re-publish plays the latest
+            cr._send(m);
+        } else this.anims[k] = cr.animate(ref, { property, name, keys, interp: 'linear' });
+    }
+
     /** A dial's moving parts to a new state: a uniform (shader), or changed rectangles (redrawn). */
     dialState(key, st, now) {
         const d = this.dials[key];
@@ -508,8 +537,12 @@ class ClassicCluster {
         const moved = !o || o.lv !== st.lv || ['a', 'b', 'c'].some((k) => Math.abs(o[k] - st[k]) >= MIN_STEP_DEG);
         if (!moved) return;
         if (this.mode === 'shader') {
-            d.st = st; this.sends++;
-            this.cr.uniform(d.fx, 'u_v', [round2(st.a), round2(st.b), st.lv, round2(st.c)]);
+            if (now - (d.animAt || 0) < ANIM_MS && (!o || o.lv === st.lv)) return;
+            const to = [round2(st.a), round2(st.b), st.lv, round2(st.c)];
+            // from where it is to where it goes; the shift lights' level (z) is not blended: the new one throughout
+            const from = d.uv ? [d.uv[0], d.uv[1], st.lv, d.uv[3]] : to;
+            this.glide(d.fx, 'uniform', from, to, 'u_v');
+            d.uv = to; d.st = st; d.animAt = now; this.sends++;
             return;
         }
         if (now - d.at < 1000 / REDRAW_FPS) return;

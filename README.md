@@ -205,6 +205,15 @@ again, press the controller's MENU or HOME button, or hold the volume knob down 
 Preview on a PC (no SDK, nothing installable): `python3 kit/tools/build.py --preview-only mx_classic_cluster`,
 then `node kit/tools/preview.js dist/mx_classic_cluster preview wait=8 render`.
 
+## Smooth needles (0.12.0)
+
+The needles' motion is sent as **renderer animations**: about 10 times a second the app tells cluster-render
+"from here to there over 100 ms", and the renderer plays it on the cluster's own clock, every frame. Before,
+each step was a value in the renderer's next update, and an update waits for that moment's picture uploads, so
+the needles moved in jerks however fast the app sent them. *Shader* (now the default: the needle, the lit arc
+and the shift lights all glide) and *Rotating layer* use it; *Redrawn images* can't (the needle is pixels) and
+stays the fallback.
+
 ## Performance (Arc style)
 
 What the Arc style sends to the cluster while driving hard (a desk simulation: revs climbing 2,000 to 6,800
