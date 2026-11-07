@@ -457,10 +457,21 @@ class ClassicCluster {
             const lv2 = A.numeralLevels(rpm, d.nums.length);
             const changed = [];
             lv2.forEach((k, i) => { if (k !== d.levels[i]) changed.push(i); });
-            // rotating mode: the needle layer glides to where it's going (a renderer animation, ANIM_MS)
-            if (d.needle && Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG && now - (d.needleAnimAt || 0) >= ANIM_MS) {
-                this.glide(d.needle, 'rotate', [round2(d.needleAt)], [round2(a)]);
-                d.needleAt = a; d.needleAnimAt = now; this.sends++;
+            // rotating mode: the needle layer glides (a renderer animation). With live data, once per new
+            // rpm from the car, from the last one to this one over the time the car takes between rpms
+            // (so it moves all the time, a sample behind); else (sweep, demo) every ANIM_MS
+            if (d.needle) {
+                if (!this.sweep && v.rpmSeq != null) {
+                    if (v.rpmSeq !== d.rpmSeq) {
+                        d.rpmSeq = v.rpmSeq;
+                        const to = lerp(F.A0, F.A1, clamp01((v.rpm || 0) / (d.spec.max || 8000)));
+                        const ms = Math.max(50, Math.min(400, Math.round(v.rpmEvery || ANIM_MS)));
+                        if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) { this.glide(d.needle, 'rotate', [round2(d.needleAt)], [round2(to)], null, ms); d.needleAt = to; this.sends++; }
+                    }
+                } else if (Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG && now - (d.needleAnimAt || 0) >= ANIM_MS) {
+                    this.glide(d.needle, 'rotate', [round2(d.needleAt)], [round2(a)]);
+                    d.needleAt = a; d.needleAnimAt = now; this.sends++;
+                }
             }
             if (this.mode === 'shader') {
                 this.dialState('tach', st, now);
@@ -514,11 +525,11 @@ class ClassicCluster {
      * a layer never collects more than its 16; the property is also set to `from` first, which is where
      * it goes back to if an animation is ever dropped.
      */
-    glide(ref, property, from, to, name) {
+    glide(ref, property, from, to, name, ms) {
         const cr = this.cr;
         if (property === 'rotate') cr.set(ref, { rotate: from[0] });
         else cr.uniform(ref, name, from);
-        const keys = '0:' + from.join(',') + ' ' + ANIM_MS + ':' + to.join(',');
+        const keys = '0:' + from.join(',') + ' ' + (ms || ANIM_MS) + ':' + to.join(',');
         this.anims = this.anims || {};
         const k = ref + ':' + property, n = this.anims[k];
         const l = cr.layers && cr.layers.get(ref);
@@ -537,12 +548,10 @@ class ClassicCluster {
         const moved = !o || o.lv !== st.lv || ['a', 'b', 'c'].some((k) => Math.abs(o[k] - st[k]) >= MIN_STEP_DEG);
         if (!moved) return;
         if (this.mode === 'shader') {
-            if (now - (d.animAt || 0) < ANIM_MS && (!o || o.lv === st.lv)) return;
-            const to = [round2(st.a), round2(st.b), st.lv, round2(st.c)];
-            // from where it is to where it goes; the shift lights' level (z) is not blended: the new one throughout
-            const from = d.uv ? [d.uv[0], d.uv[1], st.lv, d.uv[3]] : to;
-            this.glide(d.fx, 'uniform', from, to, 'u_v');
-            d.uv = to; d.st = st; d.animAt = now; this.sends++;
+            // plain uniforms, every tick: 0.12.0's uniform animations left the shader's needle unseen on
+            // the car, so the shader is back to what showed there before
+            d.st = st; this.sends++;
+            this.cr.uniform(d.fx, 'u_v', [round2(st.a), round2(st.b), st.lv, round2(st.c)]);
             return;
         }
         if (now - d.at < 1000 / REDRAW_FPS) return;

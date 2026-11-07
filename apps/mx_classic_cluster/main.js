@@ -52,7 +52,7 @@ mgu.run({
             notch: settings.get('notch') !== false,
             arcBg: ['graphite', 'dusk', 'twin'].indexOf(settings.get('arcBg')) >= 0 ? settings.get('arcBg') : 'grid',
             shift: settings.get('shift') !== false,
-            needles: ['shader', 'rotate'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'redraw',
+            needles: ['shader', 'rotate', 'redraw'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'rotate',
         });
 
         // fuel: litres in the tank from the cluster's own range / tank status
@@ -89,7 +89,16 @@ mgu.run({
         });
         car.setRedline(S().redline);
         let lastTick = 0;
-        car.onSample((d, t) => { lastTick = Date.now(); }, () => { lastTick = 0; });
+        // how often the car sends a new rpm: the needle glides from one to the next over that time
+        let rpmSeq = 0, rpmLast = null, rpmAt = 0, rpmEvery = 100;
+        car.onSample((d, t) => {
+            lastTick = Date.now();
+            if (typeof d.rpm === 'number' && d.rpm !== rpmLast) {
+                const now = Date.now();
+                if (rpmAt && now - rpmAt < 1000) rpmEvery += ((now - rpmAt) - rpmEvery) * 0.2;
+                rpmLast = d.rpm; rpmAt = now; rpmSeq++;
+            }
+        }, () => { lastTick = 0; });
 
         /* ---------- on / off, and the guard that turns it off by itself ---------- */
         let tripped = '';
@@ -171,7 +180,7 @@ mgu.run({
             const fuel = d.demo ? 0.62 : fuelL === null ? null : fuelL / s.tank;
             const boostPsi = d.demo ? Math.max(0, Math.min(19, ((d.rpm || 0) - 1500) / 3500 * 19)) : boostPsiOf(boostBar, boostAt, now, s.boostRef);
             return {
-                speed, rpm: d.rpm || 0, fuel, oil: oilDial, oilC, boostPsi, boost: boostPsi === null ? null : boostPsi / F.BOOST_MAX,
+                speed, rpm: d.rpm || 0, rpmSeq: d.demo ? null : rpmSeq, rpmEvery, fuel, oil: oilDial, oilC, boostPsi, boost: boostPsi === null ? null : boostPsi / F.BOOST_MAX,
                 coolC: typeof d.coolant === 'number' ? d.coolant : null, torqueNm: typeof d.torque === 'number' ? d.torque : null,
                 speedText: String(Math.round(speed)), gearText: gearText(d), live: !d.demo,
                 rangeText: info.rangeText, odoText: info.odoText, modeText: info.modeText, outsideC: info.outsideC, iatC: info.iatC,
@@ -206,7 +215,7 @@ mgu.run({
                     return n + ' ' + Object.keys(g.counts).map((k) => g.counts[k] + ' ' + k).join('/') + (g.why ? ' (' + g.why + ')' : '');
                 }).join(' | ');
                 const sweepNote = sweepMsg && Date.now() - sweepMsg.at < 4000 ? '  Sweep: ' + sweepMsg.text : (st.sweeping ? '  Sweeping' : '');
-                const lines = ['Layers: ' + st.layers + ' of 8   Needles: ' + st.mode + sweepNote]
+                const lines = ['Layers: ' + st.layers + ' of 8   Needles: ' + st.mode + '   rpm from the car: ' + (v.live ? Math.round(1000 / Math.max(1, v.rpmEvery)) + ' a second' : '-') + sweepNote]
                     .concat(wrap(groups, 74))
                     .concat(st.refused ? wrap('Refused ' + st.refused + ': ' + st.lastRefused, 74) : []);
                 lines.slice(0, 5).forEach((line, i) => cv.text(line, mid, 420 + i * 22, 17, t.dim, { align: 'center', literal: true }));

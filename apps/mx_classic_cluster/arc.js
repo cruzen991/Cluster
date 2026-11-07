@@ -50,7 +50,7 @@ const ORANGE = [255, 122, 26], WHITE = '#f5f6f8', DIM = '#7a8088', FAINT = '#343
  * pictures, stretched smaller by the renderer, bilinear) with the pivot NOTCH_CY down, which
  * clears the camera with the ticks and keeps the bottom clear of the strip.
  */
-const NOTCH_SCALE = 0.9, NOTCH_CY = 470;   // 0.12.0: larger and lower than 0.11.4's 0.8 at 404 (still under the camera's edge)
+const NOTCH_SCALE = 1.04, NOTCH_CY = 466;  // 0.12.1: from the car's photo, the camera ends about y 147; the ticks now start at 154
 function arcLayout(dy, notch) {
     const y = dy || 0, k = notch ? NOTCH_SCALE : 1, cy = y + (notch ? NOTCH_CY : DCY);
     const sized = (w, h, px, py) => Object.assign({ x: Math.round(960 - px * k), y: Math.round(cy - py * k), w: Math.round(w * k), h: Math.round(h * k) },

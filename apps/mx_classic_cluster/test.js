@@ -222,7 +222,7 @@ for (const st of ['tech']) {
 {
     const A = require('./arc');
     const N = A.arcLayout(0, true), k = N.scale;
-    assert(k < 1 && N.dial.iw === A.DW && N.dial.sampling === 'bilinear' && N.centre.iw === 300);
+    assert(k !== 1 && N.dial.iw === A.DW && N.dial.sampling === 'bilinear' && N.centre.iw === 300);
     // the pivot of the stretched dial lands at (cx, cy)
     assert(Math.abs(N.dial.x + A.DCX * k - N.cx) <= 1 && Math.abs(N.dial.y + A.DCY * k - N.cy) <= 1);
     const top = (r, a) => [N.cx + Math.sin(a * Math.PI / 180) * r * k, N.cy - Math.cos(a * Math.PI / 180) * r * k];
@@ -234,7 +234,8 @@ for (const st of ['tech']) {
     }
     assert(N.cy + 192 * k < N.strip.y, 'the rpm label clears the strip');
     assert(N.dial.y + N.dial.h <= 720 && N.dial.y >= 0, 'the dial inside the panel');
-    assert(N.cy - A.R * k >= 190, 'ticks well below the camera');
+    assert(N.cy - A.R * k >= 150, 'ticks below the camera (it ends about y 147)');
+    assert(k > 1, 'the tach a little larger than full size');
     const F0 = A.arcLayout(0, false);
     assert.strictEqual(F0.scale, 1); assert(!F0.dial.iw, 'full size: no stretch');
 }
@@ -297,8 +298,8 @@ for (const st of ['tech']) {
     assert.deepStrictEqual(spec.settings.find((x) => x.key === 'style').options.map((o) => o[0]).sort(), ['arc', 'tech'], 'only the Arc and Tech styles');
     assert(!spec.settings.some((x) => x.key === 'illum'));
     assert(spec.config.dme.iat.length >= 1 && spec.signals['de.bmw.infrastructure.EnvironmentalInformation']._optional);
-    assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "shader");
-    assert.deepStrictEqual(spec.settings.find((x) => x.key === 'needles').options.map((o) => o[0]), ['shader', 'rotate', 'redraw']);
+    assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "rotate");
+    assert.deepStrictEqual(spec.settings.find((x) => x.key === 'needles').options.map((o) => o[0]), ['rotate', 'shader', 'redraw']);
     assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
 }
 

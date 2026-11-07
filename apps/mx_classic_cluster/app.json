@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -287,20 +287,20 @@
       "key": "needles",
       "label": "Needles drawn by",
       "type": "choice",
-      "default": "shader",
-      "reset": 5,
+      "default": "rotate",
+      "reset": 6,
       "options": [
         [
-          "shader",
-          "Shader (smoothest; default)"
+          "rotate",
+          "Rotating layer (default; Arc style)"
         ],
         [
-          "rotate",
-          "Rotating layer (Arc style)"
+          "shader",
+          "Shader"
         ],
         [
           "redraw",
-          "Redrawn images (5 a second, the fallback)"
+          "Redrawn images (5 a second)"
         ]
       ]
     },
