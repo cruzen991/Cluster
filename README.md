@@ -64,25 +64,6 @@ artwork. **Parked only** by default (it pauses while the car moves; setting *Par
   bot that plays it (reaching homes on every speed), and the kit's desk preview with the GPU renderer stand-in.
 
 
-## Ambient Light Lab (test app)
-
-A third app: finds out what this car's ambient lighting accepts from an app, one change at a time, as the
-first step towards a real ambient light app. This car's head unit has the services (in its catalog,
-`/etc/oap/someip/someip-interfaces.json`): `ComfortFunctionIuK.ambientLightInteriorColour` (colour presets 1-12,
-an individual mode with three zone hues, a 12-bit hue, a brightness offset, "follow the drive mode") and
-`AmbientLight` (brightness, contour-line brightness, on / off, light profiles). Whether the car's lighting
-honours each of them (a free hue on a car with fixed colours, say) can only be seen on the car.
-
-- **The screen** shows what the car reports (its colour setting, brightness, which services answer), then a
-  button per test: next / previous colour preset, a free colour (the hue a twelfth of the circle further
-  each press; *Settings*: 12-bit or degrees), three zone colours, colour follows the drive mode, brighter,
-  dimmer, and **Put it back how it was** (what the car reported when the app started). The last three tries
-  are listed with what the car reported afterwards (or "no change").
-- **Safe by construction:** every message is the one the car's own Ambient light menu sends, with "leave as is"
-  in every part the button doesn't mean to change. Nothing is coded into a control unit.
-- **Status: untested on a car.** On a PC: its messages and logic with `node apps/mx_ambient/test.js`, its signals
-  against this car's catalog (`kit/tools/check_signals.py`: 0 problems), the desk preview.
-
 ## Install
 
 1. Have the MGU Store on the head unit (root SSH access is needed once for that; see its README).
