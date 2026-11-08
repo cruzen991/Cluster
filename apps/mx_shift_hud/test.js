@@ -98,6 +98,7 @@ for (const lv of [0, 1, 5, 6, 11, 12]) {
     };
     const logs = [];
     const hud = new ShiftHud({ log: { info: (m) => logs.push(m), warn: (m) => logs.push('W ' + m) }, settings: () => S });
+    hud.coverMode = true;                       // the cover design (an older cluster-render)
     hud.cr = fake; hud._layers();
     const L = hud.L;
     assert.strictEqual(sent.filter((m) => m.op === 'layer').length, 6, 'six layers');
@@ -138,6 +139,53 @@ for (const lv of [0, 1, 5, 6, 11, 12]) {
     assert.strictEqual(sent.slice(n4).filter((m) => m.op === 'pixels').length, 0, 'hiding sends no pixels');
     run({ rpm: NaN, gearText: undefined, boostPsi: NaN }, 200);           // garbage: no throw, nothing lit
     assert.strictEqual(hud.status().lit, 0);
+}
+
+/* the sprites design (cluster-render 0.4.2+, the default): no black, no pixels for the lights */
+{
+    const sent = [];
+    let next = 1;
+    const fake = {
+        image(o) { const ref = next++; sent.push({ op: 'layer', ref, o }); return ref; },
+        pixels(ref, rects, px) { sent.push({ op: 'pixels', ref, rects, bytes: px.length }); return true; },
+        set(ref, o) { sent.push({ op: 'set', ref, o }); }, drop(ref) { sent.push({ op: 'drop', ref }); },
+    };
+    const hud = new ShiftHud({ log: { info() {}, warn() {} }, settings: () => S });
+    hud.cr = fake; hud._layers();
+    const L = hud.L;
+    assert.strictEqual(L.mode, 'sprites');
+    assert.strictEqual(sent.filter((m) => m.op === 'layer').length, A.N + 4, 'a layer per light, the unlit band, the flash, gear, boost');
+    // no opaque black anywhere: every pixel sent is either see-through or has light in it
+    const art = hud.art;
+    [art.dark, art.red].concat(art.sprites.map((x) => x.cv)).forEach((cv) => {
+        for (let i = 0; i < cv.d.length; i += 4) if (cv.d[i + 3] > 40) assert(cv.d[i] + cv.d[i + 1] + cv.d[i + 2] > 60, 'no dark opaque pixel');
+    });
+    // each sprite is exactly its light: put together, lv lit lights look like the band with lv lit
+    const lit5 = A.darkBand();
+    for (let i = 0; i < 5; i++) A.drawLight(lit5, i, 'lit');
+    const comp = A.darkBand();
+    art.sprites.slice(0, 5).forEach((sp) => { for (let y = 0; y < sp.q.h; y++) for (let x = 0; x < sp.q.w; x++) { const j = (y * sp.q.w + x) * 4, a = sp.cv.d[j + 3]; if (a) comp._blend(sp.q.x + x, sp.q.y + y, [sp.cv.d[j], sp.cv.d[j + 1], sp.cv.d[j + 2], 255], a / 255); } });
+    let worst = 0;
+    for (let i = 0; i < comp.d.length; i++) worst = Math.max(worst, Math.abs(comp.d[i] - lit5.d[i]));
+    assert(worst <= 3, 'sprites over the unlit band = the lit band: ' + worst);
+    let t = 1000;
+    const run = (v, ms) => { hud.update(Object.assign({ show: true, gearText: '3', boostPsi: 10 }, v)); for (let k = 0; k < ms; k += 33) hud.tick(t += 33); };
+    run({ rpm: 900 }, 200);
+    const n1 = sent.length;
+    for (let r = 3000; r <= 6990; r += 40) run({ rpm: r }, 33);
+    const sweep = sent.slice(n1);
+    assert.strictEqual(sweep.filter((m) => m.op === 'pixels' && m.ref !== L.boost).length, 0, 'a rev sweep sends no light pixels');
+    assert.strictEqual(sweep.filter((m) => m.op === 'set' && L.sprites.includes(m.ref) && m.o.visible).length, A.N, 'each light shown once on the way up');
+    run({ rpm: 7100 }, 600);
+    assert(L.sprites.every((ref) => L.vis[ref] === false), 'flashing: the lights hidden, the red band flashes');
+    run({ rpm: 4800 }, 300);
+    assert.deepStrictEqual(L.sprites.map((ref) => L.vis[ref]), L.sprites.map((_, i) => i < 2), 'two lights at 4,800');
+    // a refused layer (an older cluster-render) switches to the cover design
+    const was = L.all.slice();
+    hud.cr = Object.assign(fake, { on() {} });
+    hud.coverMode = true; hud._rebuild();
+    assert(was.every((ref) => sent.some((m) => m.op === 'drop' && m.ref === ref)), 'the sprite layers dropped');
+    assert.strictEqual(hud.L.mode, 'cover'); assert.strictEqual(hud.L.all.length, 6);
 }
 
 console.log('shift hud: all checks passed');

@@ -179,6 +179,18 @@ function maskArt() {
     return cv;
 }
 
+/**
+ * Light i lit (with its glow), alone: { cv, q } - q its rectangle in the band layer. The sprites
+ * design (cluster-render 0.4.2+): one layer per light, shown and hidden; no black anywhere.
+ */
+function lightSprite(i) {
+    const full = new Canvas(BAND.w, BAND.h).clear([0, 0, 0, 0]);
+    drawLight(full, i, 'lit');
+    const q = LIGHT_RECTS[i], cv = new Canvas(q.w, q.h).clear([0, 0, 0, 0]);
+    for (let y = 0; y < q.h; y++) cv.d.set(full.d.subarray(((q.y + y) * BAND.w + q.x) * 4, ((q.y + y) * BAND.w + q.x + q.w) * 4), y * q.w * 4);
+    return { cv, q };
+}
+
 /** The cover's turn (degrees, clockwise) that leaves lv lights lit. */
 const coverAngle = (lv) => Math.max(0, Math.min(N, lv)) * STEP;
 /** The band's centre in the band layer: the cover turns about it. */
@@ -304,5 +316,5 @@ function shiftState(rpm, s, prev) {
 
 module.exports = {
     HW, HH, N, ARC, BAND, GEAR, BOOST, BOOST_CELL, LIGHT_RECTS, GREEN, YELLOW, RED,
-    STEP, PIVOT, MASK, maskArt, colourOf, drawLight, darkBand, redBand, litBand, coverBand, coverAngle, inkRect, gearArt, boostArt, boostFigures, boostText, hudGear, shiftState, bigText, union,
+    STEP, PIVOT, MASK, maskArt, lightSprite, colourOf, drawLight, darkBand, redBand, litBand, coverBand, coverAngle, inkRect, gearArt, boostArt, boostFigures, boostText, hudGear, shiftState, bigText, union,
 };

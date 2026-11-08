@@ -171,7 +171,9 @@ class ClassicCluster {
             this.state.refused = (this.state.refused || 0) + 1;
             this.state.lastRefused = op + ' ' + ((this.groups && this.groups[ref]) || ref) + ': ' + (reason || '');
             this.log.warn('refused ' + op + ' ' + ref + ': ' + (reason || ''));
-            this.preloadFailed(cr, op + ' refused: ' + (reason || ''));
+            // only what the pre-loaded mode can't do without (an older cluster-render) turns it off; a
+            // stray message refused (a set to a layer being rebuilt, say) does not
+            if (['layer', 'asset', 'bind'].includes(op) || /too many|unknown op|not supported/.test(reason || '')) this.preloadFailed(cr, op + ' refused: ' + (reason || ''));
         });
         this.build();
         cr.connect();
@@ -218,7 +220,17 @@ class ClassicCluster {
                     if (!live()) return;
                     const bk = A.BACKGROUNDS[s.arcBg] ? s.arcBg : 'grid';
                     if (!art.bg || art.bgKind !== bk) { art.bg = A.background(bk); art.bgKind = bk; }
-                    later(() => { if (live()) this._arcLayers(s, o, art, t0); });
+                    // the pre-loaded art, each part on a turn of its own (tens of ms each here, more on the head unit)
+                    const pre = s.needles === 'preload' && !this.preloadOff;
+                    later(() => {
+                        if (!live()) return;
+                        if (pre) this.preArt(art, o, s);
+                        later(() => {
+                            if (!live()) return;
+                            if (pre) this.preAtlases(art);
+                            later(() => { if (live()) this._arcLayers(s, o, art, t0); });
+                        });
+                    });
                 });
             });
             return;
@@ -267,7 +279,9 @@ class ClassicCluster {
     _arcLayers(s, o, art, t0) {
         const cr = this.cr, L = A.arcLayout(s.dy, s.notch);
         Object.keys(this.refs).forEach((k) => cr.drop(this.refs[k]));
-        this.dropAssets();
+        // the glyph atlases never change: kept for a pre-loaded rebuild on this connection, dropped otherwise
+        const willPreload = s.needles === 'preload' && !this.preloadOff;
+        if (!willPreload) this.dropAssets();
         const R = this.refs = {};
         const base = { target: TARGET, visible: true, contend: s.retake ? 1 : 0 };
         const img = (q) => cr.image(Object.assign({}, base, q));
@@ -333,6 +347,21 @@ class ClassicCluster {
         this.log.info(count + ' layers (arc), drawn in ' + (Date.now() - t0) + ' ms');
     }
 
+    /** The pre-loaded dial art (preload.js) for these settings, cached with the arc art. */
+    preArt(art, o, s) {
+        if (art.pre && art.preShift === !!s.shift) return;
+        const spec = A.arcFx(o);
+        if (!s.shift) spec.lights = null;
+        art.pre = PL.dialArt(art.base, art.nums, spec); art.preShift = !!s.shift;
+        if (!art.basePad) { art.basePad = new F.Canvas(PL.SNAP * Math.ceil(A.DW / PL.SNAP), A.DH).clear([0, 0, 0, 0]); art.basePad.blit(art.base, 0, 0); }
+    }
+    /** The readouts' glyph atlases (the same for every setting). */
+    preAtlases(art) {
+        if (art.atlases) return;
+        art.atlases = { figs96: PL.atlas('tabular', 96, A.ROW.v1.h, A.ROW.b1 - A.ROW.v1.y), figs64: PL.atlas('tabular', 64, A.CENTRE_SPEED.h, 247 - A.CENTRE_SPEED.y),
+            gear: PL.atlas('gear', 118, A.CENTRE_GEAR.h, 160 - A.CENTRE_GEAR.y) };
+    }
+
     /**
      * The arc style pre-loaded (preload.js): every picture sent once; the dial and readouts then move
      * only by the renderer (turns, scales, shows and hides, uniforms). About 45 layers and 3 assets.
@@ -341,7 +370,7 @@ class ClassicCluster {
         const cr = this.cr, k = L.scale;
         const spec = A.arcFx(o);
         if (!s.shift) spec.lights = null;
-        if (!art.pre || art.preShift !== !!s.shift) { art.pre = PL.dialArt(art.base, art.nums, spec); art.preShift = !!s.shift; }
+        this.preArt(art, o, s); this.preAtlases(art);              // drawn already (build), unless called directly
         const pre = art.pre;
         // a sub-picture of the dial, at the dial's scale and place (dial pixels q: multiples of 25,
         // so at the notch scale they land on whole panel pixels, exactly over the face)
@@ -351,7 +380,6 @@ class ClassicCluster {
 
         // the face without numerals, padded to a width of whole 25s (725) so that at the notch scale
         // its rectangle is exact (754, not 748.8 rounded) and every layer over it lines up to the pixel
-        if (!art.basePad) { art.basePad = new F.Canvas(PL.SNAP * Math.ceil(A.DW / PL.SNAP), A.DH).clear([0, 0, 0, 0]); art.basePad.blit(art.base, 0, 0); }
         const dial = Object.assign({}, L.dial, { w: Math.round(art.basePad.w * k), h: Math.round(art.basePad.h * k) }, k !== 1 ? { iw: art.basePad.w, ih: art.basePad.h, sampling: 'bilinear' } : {});
         const d = { ref: img(Object.assign({ z: 0 }, dial)), spec, pre: true, pending: false, needleAt: F.A0, rpmSeq: null, needleAnimAt: 0, lv: -1 };
         cr.pixels(d.ref, null, buf(art.basePad));
@@ -383,10 +411,9 @@ class ClassicCluster {
         this.dials = { tach: d };
 
         // readouts: the panels as before, but the changing figures drawn by effect layers from glyph atlases
-        if (!art.atlases) art.atlases = { figs96: PL.atlas('tabular', 96, A.ROW.v1.h, A.ROW.b1 - A.ROW.v1.y), figs64: PL.atlas('tabular', 64, A.CENTRE_SPEED.h, 247 - A.CENTRE_SPEED.y),
-            gear: PL.atlas('gear', 118, A.CENTRE_GEAR.h, 160 - A.CENTRE_GEAR.y) };
-        const assets = {};
+        const assets = this.assetRefs || {};
         Object.keys(art.atlases).forEach((key) => {
+            if (assets[key]) return;
             const at = art.atlases[key];
             assets[key] = cr.asset({ target: TARGET, format: 'rgba8', w: at.cv.w, h: at.cv.h, sampling: 'bilinear' });
             cr.pixels(assets[key], null, buf(at.cv));

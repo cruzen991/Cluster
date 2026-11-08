@@ -4,6 +4,11 @@
  * (robertnisipeanu/idrive-apps, native/cluster-render): its `hud` target, 800 x 480, slot 0x323,
  * the area of the HUD above BMW's own speed bar.
  *
+ * Two designs of the same picture. "sprites" (cluster-render 0.4.2+, 64 layers a client): the unlit
+ * band, each lit light a layer of its own shown and hidden, the red band, the gear and boost (16
+ * layers), with no black pixels anywhere. "cover" (an older cluster-render, 8 layers a client: used
+ * when a layer is refused):
+ *
  * Layers (6 of the 8 one app may have), all image layers:
  *
  *   lit     every shift light lit, in its colour                  sent once
@@ -92,7 +97,15 @@ class ShiftHud {
         });
         cr.on('layer', (ref, state, reason) => {
             this.state.layers[ref] = state;
-            if (state === 'error') this.log.warn('layer ' + ref + ' refused: ' + (reason || ''));
+            if (state === 'error') {
+                this.log.warn('layer ' + ref + ' refused: ' + (reason || ''));
+                // an older cluster-render (8 layers a client): the cover design, which needs 6
+                if (this.cr === cr && !this.coverMode && /too many layers/.test(reason || '')) {
+                    this.coverMode = true;
+                    this.log.warn('sprites refused: using the cover design');
+                    setTimeout(() => { if (this.cr === cr) this._rebuild(); }, 0);
+                }
+            }
         });
         cr.on('budget', (cap, max) => { this.state.budget = cap + '/' + max + ' KB/s'; });
         cr.on('refused', (op, ref, reason) => {
@@ -109,33 +122,52 @@ class ShiftHud {
         this.state = { target: 'off', reason: '', disabled: false, layers: {}, budget: '', refused: 0, lastRefused: '' };
     }
 
+    /** Drop every layer and make them again (the design changed). */
+    _rebuild() {
+        const L = this.L;
+        if (!this.cr || !L) return;
+        L.all.forEach((ref) => this.cr.drop(ref));
+        this.state.layers = {};
+        this._layers();
+    }
+
     /** Make the layers, all hidden until there is something to show (tick shows them). */
     _layers() {
         const cr = this.cr, B = A.BAND;
         const img = (q, z, more) => cr.image(Object.assign({ target: TARGET, visible: false, contend: 0, z, x: q.x, y: q.y, w: q.w, h: q.h }, more || {}));
-        if (!this.art) {
-            const t0 = Date.now();
-            this.art = { lit: A.litBand(), cover: A.coverBand(), mask: A.maskArt(), red: A.redBand() };
-            this.log.info('band drawn in ' + (Date.now() - t0) + ' ms');
+        const t0 = Date.now();
+        this.art = this.art || {};
+        const art = this.art;
+        if (!art.red) art.red = A.redBand();
+        const L = this.L = { turn: 0, gearText: null, gearCv: null, boostText: null, boostAt: 0, boostCv: null,
+            shown: false, flashing: false, flashT0: 0, st: null, vis: {}, sprites: null, mode: this.coverMode ? 'cover' : 'sprites' };
+        if (this.coverMode) {
+            if (!art.cover) { art.lit = A.litBand(); art.cover = A.coverBand(); art.mask = A.maskArt(); }
+            L.lit = img(B, 0);
+            L.cover = img(B, 1, { px: A.PIVOT.x, py: A.PIVOT.y, rotate: 0, sampling: 'bilinear' });
+            L.mask = img(A.MASK, 2);
+            cr.pixels(L.lit, null, buf(art.lit));
+            cr.pixels(L.cover, null, buf(art.cover));
+            cr.pixels(L.mask, null, buf(art.mask));
+        } else {
+            if (!art.dark) { art.dark = A.darkBand(); art.sprites = Array.from({ length: A.N }, (_, i) => A.lightSprite(i)); }
+            L.dark = img(B, 0);
+            cr.pixels(L.dark, null, buf(art.dark));
+            L.sprites = art.sprites.map((sp) => {
+                const ref = img({ x: B.x + sp.q.x, y: B.y + sp.q.y, w: sp.q.w, h: sp.q.h }, 1);
+                cr.pixels(ref, null, buf(sp.cv));
+                return ref;
+            });
         }
-        const L = this.L = {
-            lit: img(B, 0),
-            cover: img(B, 1, { px: A.PIVOT.x, py: A.PIVOT.y, rotate: 0, sampling: 'bilinear' }),
-            mask: img(A.MASK, 2),
-            flash: img(B, 3),
-            gear: img(A.GEAR, 4), boost: img(A.BOOST, 4),
-            turn: 0, gearText: null, gearCv: null, boostText: null, boostAt: 0, boostCv: null,
-            shown: false, flashing: false, flashT0: 0, st: null, vis: {},
-        };
-        cr.pixels(L.lit, null, buf(this.art.lit));
-        cr.pixels(L.cover, null, buf(this.art.cover));
-        cr.pixels(L.mask, null, buf(this.art.mask));
-        cr.pixels(L.flash, null, buf(this.art.red));
+        L.flash = img(B, 3);
+        L.gear = img(A.GEAR, 4); L.boost = img(A.BOOST, 4);
+        cr.pixels(L.flash, null, buf(art.red));
         this._gear('-');
         L.boostCv = A.boostArt('--'); L.boostText = '--';
         cr.pixels(L.boost, null, buf(L.boostCv));
-        this.layerCount = 6;
-        if (this.layerCount > MAX_LAYERS) this.log.warn(this.layerCount + ' layers, more than cluster-render allows one app');
+        L.all = [L.lit, L.cover, L.mask, L.dark, L.flash, L.gear, L.boost].concat(L.sprites || []).filter(Boolean);
+        this.layerCount = L.all.length;
+        this.log.info(this.layerCount + ' layers (' + L.mode + '), drawn in ' + (Date.now() - t0) + ' ms');
     }
 
     /** A new gear: only the rectangle the old and the new gear cover is sent. */
@@ -164,14 +196,16 @@ class ShiftHud {
         const s = this.S(), v = this.v;
         const show = !!v.show;
 
-        // the lights: the cover turned to leave st.lv lit; from the redline it covers them all and
-        // the red layer flashes over it
+        // the lights: sprites shown up to st.lv (or the cover turned to leave st.lv lit); from the
+        // redline none (or the cover over all) and the red layer flashes
         const st = L.st = A.shiftState(show ? v.rpm : 0, { redline: s.redline, span: s.span, flash: s.flash }, L.st);
         if (st.flash && !L.flashing) { L.flashing = true; L.flashT0 = now; }
         if (!st.flash) L.flashing = false;
         const flashOn = L.flashing && Math.floor((now - L.flashT0) / FLASH_MS) % 2 === 0;
-        const turn = L.flashing ? 0 : A.coverAngle(st.lv);
-        if (turn !== L.turn) { L.turn = turn; this.cr.set(L.cover, { rotate: turn }); }
+        if (L.cover) {
+            const turn = L.flashing ? 0 : A.coverAngle(st.lv);
+            if (turn !== L.turn) { L.turn = turn; this.cr.set(L.cover, { rotate: turn }); }
+        }
 
         // the gear and boost
         if (show) this._gear(A.hudGear(v.gearText));
@@ -182,9 +216,8 @@ class ShiftHud {
             this.cr.pixels(L.boost, [r], crop(L.boostCv, r));
         }
 
-        this._vis(L.lit, show);
-        this._vis(L.cover, show);
-        this._vis(L.mask, show);
+        if (L.cover) { this._vis(L.lit, show); this._vis(L.cover, show); this._vis(L.mask, show); }
+        else { this._vis(L.dark, show); L.sprites.forEach((ref, i) => this._vis(ref, show && !L.flashing && i < st.lv)); }
         this._vis(L.flash, show && flashOn);
         this._vis(L.gear, show);
         this._vis(L.boost, show && !!s.boost);
@@ -195,7 +228,7 @@ class ShiftHud {
         const L = this.L, st = this.state;
         const shown = Object.keys(st.layers).filter((k) => st.layers[k] === 'shown').length;
         return { target: st.target, reason: st.reason, disabled: st.disabled, budget: st.budget, refused: st.refused, lastRefused: st.lastRefused,
-            layers: this.layerCount || 0, shown, lit: L && L.st ? L.st.lv : 0, flashing: L ? L.flashing : false, showing: L ? L.shown : false };
+            layers: this.layerCount || 0, design: L ? L.mode : '', shown, lit: L && L.st ? L.st.lv : 0, flashing: L ? L.flashing : false, showing: L ? L.shown : false };
     }
 
     /**

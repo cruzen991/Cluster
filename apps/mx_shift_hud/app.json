@@ -2,7 +2,7 @@
   "id": "mx_shift_hud",
   "title": "Shift HUD",
   "description": "Shift lights, the gear and boost on the head-up display",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "vendor": "custom",
   "loggingId": "OACA",
   "iconGlyph": "HUD",

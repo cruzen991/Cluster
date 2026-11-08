@@ -82,10 +82,12 @@ whole psi under the gear. On the HUD black is see-through, so only the lit parts
 - **One at a time with Classic Cluster:** the HUD and the cluster's `panel` target share one scene in
   cluster-render, so it never shows both. With Classic Cluster on, the HUD waits; turn Classic Cluster off
   (its *Cluster on / off*) to use the HUD.
-- **Light on the link:** six still image layers, sent once (about 1.5 MB at start). The lights move by the
-  renderer turning a cover layer about the band's centre (one small message a light, no pixels); the flash shows
-  and hides a layer (no pixels); a gear change sends the gear's rectangle (about 60 KB); boost the changed figures
-  (about 10 KB, at most 4 times a second).
+- **Light on the link:** every picture sent once (about 1.5 MB at start). With cluster-render 0.4.2+ (0.2.0):
+  each shift light is a layer of its own, shown and hidden, over the unlit band (16 layers), and nothing on the
+  HUD is black, so it can't hide anything BMW draws under it. With an older cluster-render (8 layers an app) it
+  switches by itself to the 0.1.0 design: the lights uncovered by a black cover the renderer turns (6 layers).
+  Either way moving lights and the flash cost no pixels; a gear change sends the gear's rectangle (about
+  60 KB); boost the changed figures (about 10 KB, at most 4 times a second).
 - **Its screen** shows what the HUD shows, and its state (*On the HUD*, *Waiting for the HUD* and why).
 - **Status: untested on a car.** Tested on a PC: `node apps/mx_shift_hud/test.js` (the light points, the
   hysteresis, the flash, the cover turned as the renderer turns it leaving exactly the right lights lit, the
@@ -263,6 +265,14 @@ link. 0.13.0 does this for the Arc style (setting *Drawing: Pre-loaded*, the def
 older one, cluster-render refuses layer 9 and the app goes back to the rotating layer by itself; the app's screen
 then says *Pre-loaded off ... update cluster-render*. Not yet seen on a car: if the readouts' figures are missing
 or the arc looks wrong, set *Drawing* to *Rotating layer* and send a photo of the app's screen.
+
+Bug-tested in 0.13.1 (desk only): the shaders compiled and run by a real GLSL ES 1.00 compiler (WebGL in
+Chromium), its pictures identical to the app's own model of them; every setting changed while running (style,
+redline, notch, units, background, drawing, shift lights) with no layers or atlases left behind; the renderer
+dropping the connection and the picture coming back identical; an 8-layer cluster-render falling back by itself;
+odd values (negative temperatures and torque, no data, every gear). 0.13.1 also draws the pre-loaded art on
+separate turns (the app keeps answering iDrive), keeps the atlases across setting changes, and leaves the
+pre-loaded mode only for a refusal that means the renderer can't do it.
 
 What it can't fix: the needle still moves one rpm sample behind the car, and only as often as the car sends a
 new rpm (the app's screen shows how many a second).
