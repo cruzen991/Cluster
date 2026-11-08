@@ -329,6 +329,7 @@ function figW(cv, size) {
     return FIG_W[size];
 }
 function tabular(p, key, q, x, base, val, size, col, unit) {
+    if (p.gpu && p.gpu[key]) return gpuTabular(p, key, q, x, base, val, size, col, unit);
     const cv = p.cv, str = String(val), chars = [...str];
     const dw = figW(cv, size), pw = Math.ceil(cv.textWidth('.', size, { font: 'orb', literal: true }));
     const widths = chars.map((c) => (c === '.' ? pw : dw));
@@ -348,6 +349,25 @@ function tabular(p, key, q, x, base, val, size, col, unit) {
         xx += widths[i];
     });
     if (unit) p.cell(key + '#u', { x: xx, y: q.y, w: 12 + uw, h: q.h }, unit, (g) => g.text(unit, xx + 12, base, 22, DIM, { font: 'orbm', literal: true }));
+}
+
+/**
+ * tabular() for a value the GPU draws (pre-loaded mode: an effect layer over cell q, preload.js):
+ * only the unit is drawn here, where tabular() would put it; the figures are left in
+ * p.gpu[key] ({ text, col, cx (centre, cell pixels), unitW }) for cluster.js to send as uniforms.
+ */
+function gpuTabular(p, key, q, x, base, val, size, col, unit) {
+    const cv = p.cv, str = String(val), chars = [...str], G = p.gpu[key];
+    const dw = figW(cv, size), uw = unit ? Math.ceil(cv.textWidth(unit, 22, { font: 'orbm', literal: true })) : 0;
+    const total = chars.length * dw + (unit ? 12 + uw : 0), xx = Math.round(x - total / 2) + chars.length * dw;
+    // the unit moves only when the figures' count does; then only its old and new place are sent
+    const ur = unit ? { x: xx, y: base - 22, w: 12 + uw + 2, h: 28 } : null, sig = unit + '|' + (ur ? ur.x : '');
+    if (G.unitSig !== sig) {
+        if (G.unitRect) { clearRect(cv, G.unitRect); if (!p.whole) p.rects.push(G.unitRect); }
+        if (ur) { clearRect(cv, ur); cv.text(unit, xx + 12, base, 22, DIM, { font: 'orbm', literal: true }); if (!p.whole) p.rects.push(ur); }
+        G.unitSig = sig; G.unitRect = ur;
+    }
+    G.text = str; G.col = col; G.cx = x - q.x; G.unitW = uw;
 }
 
 /* rows of a side panel (panel pixels) */
@@ -406,9 +426,11 @@ function drawStrip(p, v) {
 }
 
 /** Gear and speed inside the tach. v: { gear, speed, unit } */
+const CENTRE_GEAR = { x: 0, y: 30, w: 300, h: 150 }, CENTRE_SPEED = { x: 30, y: 184, w: 240, h: 70 };
 function drawCentre(p, v) {
-    p.cell('gear', { x: 0, y: 30, w: 300, h: 150 }, v.gear, (cv) => bigText(cv, v.gear, 150, 160, 118, WHITE));
-    tabular(p, 'speed', { x: 30, y: 184, w: 240, h: 70 }, 150, 247, v.speed, 64, WHITE, '');
+    if (p.gpu && p.gpu.gear) { Object.assign(p.gpu.gear, { text: String(v.gear), col: WHITE, cx: 150 - CENTRE_GEAR.x, unitW: 0 }); }
+    else p.cell('gear', CENTRE_GEAR, v.gear, (cv) => bigText(cv, v.gear, 150, 160, 118, WHITE));
+    tabular(p, 'speed', CENTRE_SPEED, 150, 247, v.speed, 64, WHITE, '');
     p.cell('unit', { x: 60, y: 258, w: 180, h: 30 }, v.unit, (cv) => cv.text(v.unit, 150, 280, 18, ORANGE, { font: 'orbm', align: 'center', literal: true, spacing: 4 }));
 }
 
@@ -440,4 +462,5 @@ module.exports = {
     bigText, needleSprite, gridBackground, graphiteBackground, background, BACKGROUNDS, BG_W, BG_H,
     NOTCH_SCALE, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
+    CENTRE_GEAR, CENTRE_SPEED, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,
 };

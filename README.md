@@ -173,7 +173,7 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`), which othe
 Show on the cluster; gauge style (Tech, Arc); background (Arc: horizon grid, graphite, dusk or twin glow); torque in lb-ft or Nm (Arc); shift lights (on); stock cluster hidden (default) or showing
 between the dials; mph or km/h; °F or °C; redline (7000 for a
 B58); the needle sweep at start; tank size (59 l for a G20 M340i); moving the dials apart, together, up or down;
-needles drawn as redrawn images (default), as a rotating layer (Arc style) or by a shader; boost signal gauge or absolute; retry after BMW pop-ups (off); demo data on the cluster
+drawing pre-loaded (default; Arc style, cluster-render 0.4.2+), as a rotating layer, by a shader or as redrawn images; boost signal gauge or absolute; retry after BMW pop-ups (off); demo data on the cluster
 (never, by default).
 
 The sweep takes about 2.5 s (up, a moment at full scale, back). The one at start waits 2.5 s after the dials show,
@@ -220,6 +220,7 @@ again, press the controller's MENU or HOME button, or hold the volume knob down 
 |---|---|
 | `apps/mx_classic_cluster/faces.js` | the still artwork: faces, LCDs, the centre panel; and each style's moving parts as numbers |
 | `apps/mx_classic_cluster/arc.js` | the Arc style: its face, the growing numerals, the readout panels |
+| `apps/mx_classic_cluster/preload.js` | the pre-loaded drawing: the lit arc's pieces and covers, the lights, the glyph atlases and their shader |
 | `apps/mx_classic_cluster/fx.js` | the moving parts (needles, hubs, lit ring, shift lights) as a shader and as its JavaScript twin |
 | `apps/mx_classic_cluster/cluster.js` | the cluster layers through cluster-render, needle smoothing, the sweep |
 | `apps/mx_classic_cluster/main.js` | the app: car data, on/off, safety rules, its own screen |
@@ -237,6 +238,35 @@ again, press the controller's MENU or HOME button, or hold the volume knob down 
 Preview on a PC (no SDK, nothing installable): `python3 kit/tools/build.py --preview-only mx_classic_cluster`,
 then `node kit/tools/preview.js dist/mx_classic_cluster preview wait=8 render`.
 
+## Pre-loaded drawing (0.13.0, Arc style)
+
+Advice from the author of waze-on-cluster: stream pixels only for video (CarPlay and Android Auto are video);
+**pre-load everything else and let the cluster's GPU draw it** at its own frame rate, with almost nothing on the
+link. 0.13.0 does this for the Arc style (setting *Drawing: Pre-loaded*, the default):
+
+- **Everything is sent once, at the start** (about 9 MB: 2-4 s at cluster-render's upload budget). After that,
+  while driving, the dial sends **no pixels at all**, and the readouts only a few small rectangles
+  (a unit moving when a figure count changes, or the peak).
+- **The needle:** a still sprite the renderer turns, one animation per new rpm from the car (as before).
+- **The lit rpm arc:** five lit pieces, each under a cover (the unlit track) that the renderer turns with the
+  needle, on the same animation's path; so the arc grows and shrinks exactly under the needle, every frame, with
+  no pixels. A still copy of the face past the arc's end hides the covers' far ends.
+- **The growing numerals:** each numeral a still sprite at its largest size, scaled by the renderer (animated
+  with the needle; smooth now, not 7 sizes).
+- **The shift lights:** each lit light a still sprite, shown and hidden; the redline flash one more.
+- **Boost, torque, oil, coolant, speed and the gear:** effect layers that draw their figures from a glyph atlas
+  uploaded once (cluster-render "assets"); a new value is a few numbers (which glyph, where, what colour).
+- **Desk-measured:** the same hard drive as below sends about **12 KB/s** (was 500-1,000 KB/s with the rotating
+  layer), and the picture matches the old one to within a few levels at every needle angle (`test.js`).
+
+**Needs cluster-render 0.4.2 or later** (64 layers a client, assets; it uses about 45 layers and 3 assets). With an
+older one, cluster-render refuses layer 9 and the app goes back to the rotating layer by itself; the app's screen
+then says *Pre-loaded off ... update cluster-render*. Not yet seen on a car: if the readouts' figures are missing
+or the arc looks wrong, set *Drawing* to *Rotating layer* and send a photo of the app's screen.
+
+What it can't fix: the needle still moves one rpm sample behind the car, and only as often as the car sends a
+new rpm (the app's screen shows how many a second).
+
 ## Smooth needles (0.12.0)
 
 The needles' motion is sent as **renderer animations**: about 10 times a second the app tells cluster-render
@@ -252,8 +282,9 @@ second the car sends); *Shader* is back to plain values (its animated version le
 What the Arc style sends to the cluster while driving hard (a desk simulation: revs climbing 2,000 to 6,800
 rpm every 3 s, boost and torque following), by needle setting:
 
-| Needles | Sent to the cluster | How the needle moves |
+| Drawing | Sent to the cluster | How the needle moves |
 |---|---|---|
+| Pre-loaded (0.13.0 default) | about 0.01 MB/s | renderer animations; the arc, numerals, lights and readouts pre-loaded (above) |
 | Redrawn images (default) | about 2.0 MB/s | 5 times a second, the dial's pixels redrawn |
 | Rotating layer | about 0.6 MB/s | 30 times a second: the needle is its own small layer that the renderer turns (a message of a few bytes); only the lit arc, the shift lights and the growing numerals are redrawn |
 | Shader | about 0.7 MB/s | every frame, from one uniform |

@@ -298,8 +298,8 @@ for (const st of ['tech']) {
     assert.deepStrictEqual(spec.settings.find((x) => x.key === 'style').options.map((o) => o[0]).sort(), ['arc', 'tech'], 'only the Arc and Tech styles');
     assert(!spec.settings.some((x) => x.key === 'illum'));
     assert(spec.config.dme.iat.length >= 1 && spec.signals['de.bmw.infrastructure.EnvironmentalInformation']._optional);
-    assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "rotate");
-    assert.deepStrictEqual(spec.settings.find((x) => x.key === 'needles').options.map((o) => o[0]), ['rotate', 'shader', 'redraw']);
+    assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "preload");
+    assert.deepStrictEqual(spec.settings.find((x) => x.key === 'needles').options.map((o) => o[0]), ['preload', 'rotate', 'shader', 'redraw']);
     assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
 }
 
@@ -330,4 +330,164 @@ for (const st of ['tech']) {
     assert.strictEqual(g.status().strikes, 0);
 }
 
-console.log('classic cluster self-check ok');
+
+/* ---------- pre-loaded (0.13.0): preload.js ---------- */
+const PL = require('./preload');
+{
+    const A = require('./arc');
+    // the pieces tile the arc; no cover, turned all the way, reaches past A1 + REACH (under the mask, on the backdrop)
+    assert.strictEqual(PL.PIECES[0].s, F.A0);
+    assert(Math.abs(PL.PIECES[PL.PIECES.length - 1].e - F.A1) < 1e-9);
+    PL.PIECES.forEach((P, i) => {
+        if (i) assert(Math.abs(P.s - PL.PIECES[i - 1].e) < 1e-9, 'pieces meet');
+        const reach = P.e + PL.EPS + PL.coverTurn(i, F.A1 + 50);
+        assert(reach <= F.A1 + PL.REACH + 1e-9, 'cover ' + i + ' reaches ' + reach);
+        assert(PL.coverTurn(i, F.A0 - 5) === 0 && PL.coverTurn(i, P.s + 1) > 0 === (P.s + 1 > P.s));
+    });
+    assert(PL.REACH + 0.3 < 10, 'the mask stays on the backdrop (A1 + 10)');
+    // cover keys: piecewise, ending where the cover belongs
+    const ks = PL.coverKeys(1, -100, 100, 200), P1 = PL.PIECES[1];
+    assert.strictEqual(ks[0][0], 0); assert.strictEqual(ks[ks.length - 1][0], 200);
+    assert(Math.abs(ks[ks.length - 1][1] - PL.coverTurn(1, 100)) < 1e-9);
+    ks.forEach((k, i) => { if (i) assert(k[0] >= ks[i - 1][0] && k[1] >= ks[i - 1][1] - 1e-9, 'monotonic'); });
+    assert(ks.length >= 3 || !(P1.s > -100 && P1.s < 100), 'a key where the needle enters the piece');
+    // numerals: full size at the needle, 1/(1+grow) far from it
+    assert(Math.abs(PL.numeralScale(4000, 4) - 1) < 1e-9);
+    assert(Math.abs(PL.numeralScale(0, 6) - 1 / (1 + A.NUM_GROW)) < 1e-9);
+    assert(PL.numeralScale(3600, 4) > PL.numeralScale(3300, 4));
+
+    // the lit arc, put together as the renderer turns the covers, is the old drawing (outside the
+    // needle's tip) at a few needle angles
+    const o = { redline: 7000, max: 8000 }, face = A.arcFace(o), spec = A.arcFx(o);
+    const art = PL.dialArt(face, A.numerals(o), spec);
+    const RAD = Math.PI / 180, W = A.DW, Hh = A.DH, r0 = A.R_PROG - 12, r1 = A.R_PROG + 12;
+    const samp = (cv, x, y) => {
+        const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0, r = [0, 0, 0, 0];
+        [[x0, y0, (1 - fx) * (1 - fy)], [x0 + 1, y0, fx * (1 - fy)], [x0, y0 + 1, (1 - fx) * fy], [x0 + 1, y0 + 1, fx * fy]].forEach(([xx, yy, w]) => {
+            if (xx < 0 || yy < 0 || xx >= cv.w || yy >= cv.h) return;
+            const i = (yy * cv.w + xx) * 4, a = cv.d[i + 3] * w; r[0] += cv.d[i] * a; r[1] += cv.d[i + 1] * a; r[2] += cv.d[i + 2] * a; r[3] += a;
+        });
+        return r[3] > 0 ? [r[0] / r[3], r[1] / r[3], r[2] / r[3], r[3]] : [0, 0, 0, 0];
+    };
+    const ringSpec = Object.assign({}, spec, { main: null, lights: null });
+    for (const th of [-125, -60, PL.PIECES[1].s + 0.6, 90, F.A1]) {
+        const live = new Uint8ClampedArray(W * Hh * 4);
+        FX.compose(ringSpec, { a: th, b: 0, c: 0, lv: 0 }, face.d, live, [{ x: 0, y: 0, w: W, h: Hh }]);
+        let worst = 0;
+        for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
+            const px = x + 0.5 - A.DCX, py = y + 0.5 - A.DCY, rr = Math.hypot(px, py), a = Math.atan2(px, -py) / RAD;
+            if (rr < r0 || rr > r1 || Math.abs(a - th) < 2.5) continue;
+            const i = (y * W + x) * 4;
+            let c = [face.d[i], face.d[i + 1], face.d[i + 2]];
+            const over = (s2) => { const al = s2[3] / 255; c = c.map((v, k) => s2[k] * al + v * (1 - al)); };
+            const layer = (sp, turn) => {
+                const cs = Math.cos(turn * RAD), sn = Math.sin(turn * RAD), dx = x + 0.5 - A.DCX, dy = y + 0.5 - A.DCY;
+                over(samp(sp.cv, dx * cs + dy * sn + A.DCX - sp.q.x - 0.5, -dx * sn + dy * cs + A.DCY - sp.q.y - 0.5));
+            };
+            art.pieces.forEach((p, k) => { layer(p.lit, 0); layer(p.cover, PL.coverTurn(k, th)); });
+            layer(art.mask, 0);
+            const al = live[i + 3] / 255;
+            for (let k = 0; k < 3; k++) worst = Math.max(worst, Math.abs(c[k] - live[i + k] * al - 0 * (1 - al)));
+        }
+        assert(worst <= 10, 'lit arc at ' + th + ': differs from the old drawing by ' + worst.toFixed(1));
+    }
+    // every sub-picture starts on a multiple of 25 dial pixels (exact at the notch scale)
+    [art.mask].concat(art.lights, [art.flash], art.pieces.map((p) => p.lit), art.pieces.map((p) => p.cover)).forEach((sp) => {
+        assert(sp.q.x % PL.SNAP === 0 && sp.q.y % PL.SNAP === 0, 'snapped: ' + JSON.stringify(sp.q));
+    });
+    assert.strictEqual(art.lights.length, spec.lights.n);
+
+    // readouts: the shader's twin draws the same figures as the panel did (tabular)
+    const at = PL.atlas('tabular', 96, A.ROW.v1.h, A.ROW.b1 - A.ROW.v1.y);
+    const p0 = new A.Panel(540, 500);
+    A.drawRight(p0, { boost: '19', torque: '220', tq: 'LB-FT', odo: '1 MI', peak: '' });
+    const p1 = new A.Panel(540, 500);
+    p1.gpu = { boost: {}, torque: {} };
+    A.drawRight(p1, { boost: '19', torque: '220', tq: 'LB-FT', odo: '1 MI', peak: '' });
+    const spec96 = JSON.parse(/cc-readout (\{.*\})/.exec(PL.readoutShader(A.ROW.v1.w, A.ROW.v1.h, at))[1]);
+    for (const [key, q] of [['boost', A.ROW.v1], ['torque', A.ROW.v2]]) {
+        const G = p1.gpu[key], u = PL.readoutUniforms(at, G.text, G.cx, G.unitW);
+        u.col = [1, 1, 1, 1];
+        let worst = 0;
+        for (let y = 0; y < q.h; y++) for (let x = 0; x < q.w; x++) {
+            const i = ((q.y + y) * 540 + q.x + x) * 4;
+            const g = PL.readoutShade(spec96, at.cv.d, u, x + 0.5, y + 0.5);
+            const panelA = p1.cv.d[i + 3], shown = Math.max(g[3], panelA);        // figures (GPU) + unit (pixels)
+            worst = Math.max(worst, Math.abs(shown - p0.cv.d[i + 3]));
+        }
+        assert(worst <= 40, key + ': GPU figures differ from the drawn ones by ' + worst);
+    }
+    assert.deepStrictEqual(PL.readoutUniforms(at, '--', 100, 0).g.slice(0, 2), [10, 10]);
+    assert.deepStrictEqual(PL.readoutUniforms(at, '', 100, 0).g, [-1, -1, -1, -1]);
+    assert.strictEqual(PL.readoutUniforms(at, '12345', 100, 0).g.filter((g) => g >= 0).length, 4, 'four slots at most');
+    const ag = PL.atlas('gear', 118, A.CENTRE_GEAR.h, 130);
+    assert(ag.cv.w <= 2048 && 'PRND'.split('').every((c) => ag.adv[c] > 0));
+    const d3 = PL.readoutUniforms(ag, 'D3', 150, 0);
+    assert(d3.x[1] - d3.x[0] === Math.round(ag.adv.D) && d3.g[0] === ag.glyphs.indexOf('D'));
+    // the app's settings: pre-loaded is the default
+    const nd = require('./app.json').settings.find((x) => x.key === 'needles');
+    assert.strictEqual(nd.default, 'preload');
+    assert(nd.options.some((x) => x[0] === 'rotate'), 'the rotating layer stays a choice (and the fallback)');
+}
+
+/* the cluster pre-loaded, with a stand-in client: what it sends at start and while driving */
+function preloadDrive(done) {
+    const C = require('./cluster');
+    const sent = [], layers = new Map();
+    let next = 1;
+    const add = (kind) => (o) => { const ref = next++; layers.set(ref, { kind, anims: new Map(), opts: o }); sent.push({ op: kind, ref, o }); return ref; };
+    const fake = {
+        layers, image: add('image'), effect: add('effect'), asset: add('asset'),
+        pixels(ref, rects, px) { sent.push({ op: 'pixels', ref, bytes: px.length }); return true; },
+        set(ref, o) { sent.push({ op: 'set', ref, o }); }, uniform(ref, name, v) { sent.push({ op: 'uniform', ref, name, v }); },
+        bind(ref, s, a) { sent.push({ op: 'bind', ref, s, a }); }, drop(ref) { sent.push({ op: 'drop', ref }); layers.delete(ref); },
+        animate(ref, o) { const l = layers.get(ref), n = l.anims.size + 1; l.anims.set(n, Object.assign({ op: 'animate', ref, anim: n }, o)); sent.push({ op: 'animate', ref, o }); return n; },
+        _send(m) { sent.push({ op: m.op, ref: m.ref, o: m }); },
+    };
+    const s = { on: true, style: 'arc', torqueUnit: 'lbft', shift: true, units: 'mph', tempUnit: 'f', redline: 7000, sweep: false, backdrop: 'full',
+        tank: 59, dx: 0, dy: 0, needles: 'preload', retake: false, notch: true, arcBg: 'grid' };
+    const cl = new C.ClassicCluster({ log: { info() {}, warn() {} }, settings: () => s, app: 'test' });
+    cl.cr = fake; cl.enabled = true; cl.state = { target: 'shown', reason: '', layers: {}, why: {}, budget: '' };
+    cl.build();
+    setTimeout(() => {
+        const made = sent.filter((m) => ['image', 'effect'].includes(m.op));
+        assert(made.length > 8 && made.length <= 64, made.length + ' layers');
+        assert.strictEqual(sent.filter((m) => m.op === 'asset').length, 3);
+        assert.strictEqual(cl.mode, 'preload');
+        assert(sent.filter((m) => m.op === 'bind').length === 6, 'six readouts bound to atlases');
+        let t = Date.now(), seq = 0;
+        let n0 = 0;
+        const feed = (rpm, boost) => {
+            t += 50;
+            cl.update({ speed: 50, rpm, fuel: 0.5, oil: 0.5, oilC: 95, coolC: 90, boost: 0.5, boostPsi: boost, torqueNm: 200 + rpm / 20, iatC: 30, outsideC: 15,
+                speedText: String(Math.round(rpm / 100)), gearText: 'D3', rangeText: '200 mi', odoText: '1 mi', modeText: 'Sport', live: true, rpmSeq: ++seq, rpmEvery: 50 });
+            cl.tick(50, t);
+        };
+        for (let i = 0; i < 10; i++) feed(1500, 0);             // the first readouts (whole panels) go out here
+        n0 = sent.length;
+        for (let r = 1500; r <= 7200; r += 60) feed(r, (r - 1500) / 300);
+        for (let r = 7200; r >= 3000; r -= 300) feed(r, 8);
+        const drive = sent.slice(n0), px = drive.filter((m) => m.op === 'pixels');
+        const dial = [cl.refs.dial].concat(Object.keys(cl.refs).filter((k) => /^(lit|cover|light|num)\d|^needle$|^flash$|^mask$/.test(k)).map((k) => cl.refs[k]));
+        assert.strictEqual(px.filter((m) => dial.includes(m.ref)).length, 0, 'the dial sends no pixels while driving');
+        const bytes = px.reduce((a, m) => a + m.bytes, 0);
+        if (process.env.DBG) { const by = {}; px.forEach((m) => { const k = Object.keys(cl.refs).find((x) => cl.refs[x] === m.ref); by[k] = (by[k] || 0) + m.bytes; }); console.log(by); }
+        assert(bytes < 120000, 'a 6 s pull to the redline and back sends ' + bytes + ' bytes of pixels (the peak and units moving only)');
+        assert(drive.some((m) => m.op === 'animate' || (m.o && m.o.op === 'animate')), 'animations sent');
+        assert(drive.some((m) => m.op === 'uniform' && m.name === 'u_g'), 'readouts change by uniforms');
+        const covers = Object.keys(cl.refs).filter((k) => /^cover\d/.test(k)).map((k) => cl.refs[k]);
+        const coverAnims = drive.filter((m) => covers.includes(m.ref) && (m.op === 'animate' || (m.o && m.o.op === 'animate')));
+        assert(coverAnims.length >= covers.length, 'every cover turned on the way up');
+        const fl = drive.filter((m) => m.op === 'set' && m.ref === cl.refs.flash);
+        assert(fl.length >= 2, 'the flash at the redline');
+        // a refusal (an older cluster-render) turns the pre-loaded mode off and rebuilds
+        cl.preloadFailed(fake, 'layer refused: too many layers');
+        setTimeout(() => {
+            assert.strictEqual(cl.mode, 'rotate');
+            assert(cl.status().preloadOff);
+            assert(sent.some((m) => m.op === 'drop' && m.ref === cl.assetRefs) || cl.assetRefs === null, 'atlases dropped');
+            done();
+        }, 50);
+    }, 200);
+}
+preloadDrive(() => console.log('classic cluster self-check ok'));

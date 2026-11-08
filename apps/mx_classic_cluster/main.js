@@ -52,7 +52,7 @@ mgu.run({
             notch: settings.get('notch') !== false,
             arcBg: ['graphite', 'dusk', 'twin'].indexOf(settings.get('arcBg')) >= 0 ? settings.get('arcBg') : 'grid',
             shift: settings.get('shift') !== false,
-            needles: ['shader', 'rotate', 'redraw'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'rotate',
+            needles: ['preload', 'shader', 'rotate', 'redraw'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'preload',
         });
 
         // fuel: litres in the tank from the cluster's own range / tank status
@@ -215,7 +215,8 @@ mgu.run({
                     return n + ' ' + Object.keys(g.counts).map((k) => g.counts[k] + ' ' + k).join('/') + (g.why ? ' (' + g.why + ')' : '');
                 }).join(' | ');
                 const sweepNote = sweepMsg && Date.now() - sweepMsg.at < 4000 ? '  Sweep: ' + sweepMsg.text : (st.sweeping ? '  Sweeping' : '');
-                const lines = ['Layers: ' + st.layers + ' of 8   Needles: ' + st.mode + '   rpm from the car: ' + (v.live ? Math.round(1000 / Math.max(1, v.rpmEvery)) + ' a second' : '-') + sweepNote]
+                const lines = ['Layers: ' + st.layers + ' of ' + (st.mode === 'preload' ? 64 : 8) + '   Drawing: ' + (st.mode === 'preload' ? 'pre-loaded' : st.mode) + '   rpm from the car: ' + (v.live ? Math.round(1000 / Math.max(1, v.rpmEvery)) + ' a second' : '-') + sweepNote]
+                    .concat(st.preloadOff ? wrap('Pre-loaded off (' + st.preloadOff + '): update cluster-render to 0.4.2 or later', 74) : [])
                     .concat(wrap(groups, 74))
                     .concat(st.refused ? wrap('Refused ' + st.refused + ': ' + st.lastRefused, 74) : []);
                 lines.slice(0, 5).forEach((line, i) => cv.text(line, mid, 420 + i * 22, 17, t.dim, { align: 'center', literal: true }));
