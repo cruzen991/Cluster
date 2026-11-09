@@ -237,6 +237,13 @@ figures between them), the glyph atlases are one byte a pixel (r8, as cluster-re
 lit arc's pieces are shorter (smaller rectangles). If the
 renderer still runs out (other apps on it), the app goes back to the rotating layer (11 MB) and its screen says so.
 
+**Smooth motion (0.13.3):** the needle sweep is sent as one animation (the needle, the lit arc's covers and the
+numerals), which the renderer plays by itself; before, it was a chain of 100 ms glides started by the app's
+ticks, and the needle stopped for up to a tick (or longer, when the head unit was busy) between them, about 8
+times a second. While driving, each glide now starts where the needle is and lasts a little longer than the
+time between rpms (x1.15), so the needle never stops waiting for the next one. Measured on the desk: the sweep
+went from 9-15 stops to none (only the planned hold at the top); driving from about 20 stops in 5 s to none.
+
 **Needle response (0.13.2):** the car sends a new rpm about 9 times a second (the app's screen shows it). *Smooth*
 (default): the needle glides from each reading to the next over the time between them, so it shows each one a
 reading (about 110 ms) late. *Quick*: while the revs move steadily it aims one reading ahead, so it is about where

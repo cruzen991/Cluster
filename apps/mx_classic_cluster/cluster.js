@@ -52,7 +52,10 @@ const ROTATE_MIN_DEG = 0.1;        // and the needle layer turned for a move of 
 const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
 const MAX_LAYERS = 8;              // cluster-render's per-client limit before 0.4.2
 const MAX_LAYERS_PRE = 64;         // and from 0.4.2 (the pre-loaded mode needs it)
-const SCALE_MIN = 0.003;           // pre-loaded: a numeral's scale animated for a change of at least this
+const SCALE_MIN = 0.003;
+const GLIDE_STRETCH = 1.15;        // a live glide lasts this much longer than the time between rpms, so the
+                                   // needle is still moving when the next one comes (no stop between glides)
+const SWEEP_KEY_MS = 20;           // the sweep sent as one animation: a key every this many ms           // pre-loaded: a numeral's scale animated for a change of at least this
 /* the needle sweep: slow enough that the redrawn mode's 5 pictures a second show it (0.11.2 and
  * before: 0.8 s up, 0.8 s down, 8 pictures in all, and the one at start lost in the first upload) */
 const SWEEP_UP_MS = 1100, SWEEP_HOLD_MS = 300, SWEEP_DELAY_MS = 2500;
@@ -621,12 +624,18 @@ class ClassicCluster {
                     if (v.rpmSeq !== d.rpmSeq) {
                         d.rpmSeq = v.rpmSeq;
                         const to = lerp(F.A0, F.A1, clamp01(aimRpm(d, v.rpm || 0, s.needleResponse === 'quick') / (d.spec.max || 8000)));
-                        const ms = Math.max(50, Math.min(400, Math.round(v.rpmEvery || ANIM_MS)));
-                        if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) { this.glide(d.needle, 'rotate', [round2(d.needleAt)], [round2(to)], null, ms); d.needleAt = to; this.sends++; }
+                        const ms = glideMs(v.rpmEvery);
+                        if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) {
+                            const from = glideAt(d, now);
+                            this.glide(d.needle, 'rotate', [round2(from)], [round2(to)], null, ms);
+                            d.needleAt = to; d.glideNow = { from, to, t0: now, ms }; this.sends++;
+                        }
                     }
-                } else if (Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG && now - (d.needleAnimAt || 0) >= ANIM_MS) {
-                    this.glide(d.needle, 'rotate', [round2(d.needleAt)], [round2(a)]);
-                    d.needleAt = a; d.needleAnimAt = now; this.sends++;
+                } else if (this.sweep) this._sweepPlan(d, now, s);
+                else if (Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG && now - (d.needleAnimAt || 0) >= ANIM_MS) {
+                    const from = glideAt(d, now), ms = Math.round(ANIM_MS * GLIDE_STRETCH);
+                    this.glide(d.needle, 'rotate', [round2(from)], [round2(a)], null, ms);
+                    d.needleAt = a; d.needleAnimAt = now; d.glideNow = { from, to: a, t0: now, ms }; this.sends++;
                 }
             }
             if (this.mode === 'shader') {
@@ -722,11 +731,12 @@ class ClassicCluster {
             if (v.rpmSeq !== d.rpmSeq) {
                 d.rpmSeq = v.rpmSeq;
                 const to = lerp(F.A0, F.A1, clamp01(aimRpm(d, v.rpm || 0, s.needleResponse === 'quick') / max));
-                const ms = Math.max(50, Math.min(400, Math.round(v.rpmEvery || ANIM_MS)));
-                if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) this._preGlide(d, d.needleAt, to, ms, max);
+                const ms = glideMs(v.rpmEvery);
+                if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) this._preGlide(d, glideAt(d, now), to, ms, max, now);
             }
-        } else if (Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG && now - (d.needleAnimAt || 0) >= ANIM_MS) {
-            this._preGlide(d, d.needleAt, a, ANIM_MS, max);
+        } else if (this.sweep) this._sweepPlan(d, now, s);
+        else if (Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG && now - (d.needleAnimAt || 0) >= ANIM_MS) {
+            this._preGlide(d, glideAt(d, now), a, Math.round(ANIM_MS * GLIDE_STRETCH), max, now);
             d.needleAnimAt = now;
         }
         // shift lights: lv 0..n lit, n+1 all red (the flash on), n+2 none (the flash off)
@@ -740,9 +750,9 @@ class ClassicCluster {
     }
 
     /** The needle from angle `from` to `to` in `ms`, and with it the covers and the numerals. */
-    _preGlide(d, from, to, ms, max) {
+    _preGlide(d, from, to, ms, max, now) {
         this.glide(d.needle, 'rotate', [round2(from)], [round2(to)], null, ms);
-        d.needleAt = to; this.sends++;
+        d.needleAt = to; d.glideNow = { from, to, t0: now || Date.now(), ms }; this.sends++;
         d.pieces.forEach((p, i) => {
             const keys = PL.coverKeys(i, from, to, ms);
             if (keys.every((kk) => Math.abs(kk[1] - p.turn) < 0.01)) return;           // stays where it is
@@ -757,6 +767,37 @@ class ClassicCluster {
             this.animKeys(nm.ref, 'scale', [[0, r(s0), r(s0), 1], [ms, r(s1), r(s1), 1]]);
             nm.s = s1; this.sends++;
         });
+    }
+
+    /**
+     * The needle sweep as ONE animation the renderer plays by itself (needle, and pre-loaded: the lit
+     * arc's covers and the numerals), sent on its first tick: no glide per tick, so no stop between
+     * glides however late the app's ticks come. Its clock restarts now, so the shift lights the
+     * ticks show keep step with it.
+     */
+    _sweepPlan(d, now, s) {
+        if (this.sweep.planned) return;
+        this.sweep.planned = true; this.sweep.t0 = now;
+        const U = SWEEP_UP_MS, Hd = SWEEP_HOLD_MS, T = 2 * U + Hd, max = (d.spec && d.spec.max) || tachMax(s.redline);
+        const pAt = (t) => (t < U ? ease(t / U) : t < U + Hd ? 1 : t < T ? 1 - ease((t - U - Hd) / U) : 0);
+        const times = [];
+        for (let t = 0; t < T; t += SWEEP_KEY_MS) times.push(t);
+        times.push(T);
+        const ang = times.map((t) => lerp(F.A0, F.A1, pAt(t)));
+        // a run of equal values keeps only its ends (the hold, a cover at rest)
+        const squeeze = (keys) => keys.filter((k, i) => i === 0 || i === keys.length - 1 || k[1] !== keys[i - 1][1] || k[1] !== keys[i + 1][1]);
+        this.animKeys(d.needle, 'rotate', squeeze(times.map((t, i) => [t, round2(ang[i])])));
+        this.sends++;
+        if (d.pieces) d.pieces.forEach((p, k) => {
+            this.animKeys(p.cov, 'rotate', squeeze(times.map((t, i) => [t, round2(PL.coverTurn(k, ang[i]))])));
+            p.turn = PL.coverTurn(k, F.A0); this.sends++;
+        });
+        if (d.nums) d.nums.forEach((nm) => {
+            const r = (x) => Math.round(x * 1000) / 1000;
+            this.animKeys(nm.ref, 'scale', squeeze(times.map((t, i) => { const sc = r(PL.numeralScale((ang[i] - F.A0) / (F.A1 - F.A0) * max, nm.n)); return [t, sc, sc, 1]; })));
+            nm.s = PL.numeralScale(0, nm.n); this.sends++;
+        });
+        d.needleAt = F.A0; d.glideNow = null; d.needleAnimAt = now + T;
     }
 
     /**
@@ -898,6 +939,15 @@ function crop(cv, q) { return cropMany(cv, [q]); }
  * is now; across a shift, a blip's turn or a sudden change it aims at the rpm itself, so it never
  * swings past the other way. d keeps the last reading.
  */
+/** A live glide's length: the time between rpms (50-400 ms), stretched (GLIDE_STRETCH). */
+const glideMs = (every) => Math.round(Math.max(50, Math.min(400, every || ANIM_MS)) * GLIDE_STRETCH);
+/** Where a needle is now on its last glide (degrees): the next glide starts there, not at the last target. */
+function glideAt(d, now) {
+    const g = d.glideNow;
+    if (!g) return d.needleAt;
+    const f = Math.max(0, Math.min(1, (now - g.t0) / g.ms));
+    return g.from + (g.to - g.from) * f;
+}
 const QUICK_MAX = 700;
 function aimRpm(d, rpm, quick) {
     const delta = d.lastRpm == null ? 0 : rpm - d.lastRpm;

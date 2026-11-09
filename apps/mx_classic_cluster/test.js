@@ -534,6 +534,25 @@ function preloadDrive(done) {
         assert(coverAnims.length >= covers.length, 'every cover turned on the way up');
         const fl = drive.filter((m) => m.op === 'set' && m.ref === cl.refs.flash);
         assert(fl.length >= 2, 'the flash at the redline');
+        // live glides start where the needle is (not where the last one was headed) and outlast the
+        // time between rpms, so the needle never stops between them
+        const nAn = drive.filter((m) => m.ref === cl.refs.needle && (m.op === 'animate' || (m.o && m.o.op === 'animate')) && (m.o.property === 'rotate'));
+        const durs = nAn.map((m) => Number(String(m.o.keys).split(' ').pop().split(':')[0]));
+        assert(durs.length > 20 && durs.every((ms) => ms >= 57), 'glides outlast the 50 ms between rpms: ' + durs.slice(0, 5));
+        // the sweep: ONE animation each for the needle, the covers and the numerals, nothing per tick
+        const n5 = sent.length;
+        cl.values.live = false; cl.values.speed = 0;
+        assert.strictEqual(cl.startSweep(false), '');
+        cl.sweep.t0 = t;                                                         // on this test's clock
+        for (let k = 0; k < 90; k++) { t += 33; cl.tick(33, t); }               // ~3 s of ticks
+        const sw = sent.slice(n5).filter((m) => m.op === 'animate' || (m.o && m.o.op === 'animate'));
+        const needleSw = sw.filter((m) => m.ref === cl.refs.needle);
+        assert.strictEqual(needleSw.length, 1, 'the sweep is one needle animation, not ' + needleSw.length);
+        const keys = String(needleSw[0].o.keys).split(' ').map((k) => k.split(':').map(Number));
+        assert(keys.length > 50 && keys.length <= 256, keys.length + ' keys');
+        assert.strictEqual(keys[0][1], F.A0); assert.strictEqual(keys[keys.length - 1][1], F.A0);
+        assert(Math.abs(Math.max(...keys.map((k) => k[1])) - F.A1) < 0.01, 'to full scale');
+        covers.forEach((ref) => assert(sw.filter((m) => m.ref === ref).length === 1, 'each cover one animation'));
         // a refusal (an older cluster-render) turns the pre-loaded mode off and rebuilds
         cl.preloadFailed(fake, 'layer refused: too many layers');
         setTimeout(() => {
