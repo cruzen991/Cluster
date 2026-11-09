@@ -188,6 +188,7 @@ class ClassicCluster {
         if (this.cr !== cr || this.mode !== 'preload' || this.preloadOff) return;
         this.preloadOff = why;
         this.log.warn('pre-loaded mode off (' + why + '): using the rotating layer');
+        this.preloadMemory = /memory/.test(why);
         later(() => { if (this.cr === cr) { this.faceKey = ''; this.build(); } });
     }
 
@@ -415,8 +416,8 @@ class ClassicCluster {
         Object.keys(art.atlases).forEach((key) => {
             if (assets[key]) return;
             const at = art.atlases[key];
-            assets[key] = cr.asset({ target: TARGET, format: 'rgba8', w: at.cv.w, h: at.cv.h, sampling: 'bilinear' });
-            cr.pixels(assets[key], null, buf(at.cv));
+            assets[key] = cr.asset({ target: TARGET, format: 'r8', w: at.cv.w, h: at.cv.h, sampling: 'bilinear' });
+            cr.pixels(assets[key], null, at.r8);
         });
         this.assetRefs = assets;
         const FIELDS = { left: { oil: ['figs96', A.ROW.v1], cool: ['figs96', A.ROW.v2] }, right: { boost: ['figs96', A.ROW.v1], torque: ['figs96', A.ROW.v2] },
@@ -424,7 +425,13 @@ class ClassicCluster {
         this.panels = {};
         for (const key of ['centre', 'left', 'right', 'strip']) {
             const Lk = L[key], z = key === 'centre' ? 31 : 1, kk = Lk.iw ? Lk.w / Lk.iw : 1;
-            R[key] = img(Object.assign({ z }, Lk));
+            // a panel with strips (PANEL_BANDS) is sent as a layer per strip: the rest of it is never drawn
+            const bands = PL.PANEL_BANDS[key];
+            if (bands) bands.forEach((b, i) => {
+                R[key + '#' + i] = img(Object.assign({ z, x: Lk.x + Math.round(b.x * kk), y: Lk.y + Math.round(b.y * kk), w: Math.round(b.w * kk), h: Math.round(b.h * kk) },
+                    kk !== 1 ? { iw: b.w, ih: b.h, sampling: 'bilinear' } : {}));
+            });
+            else R[key] = img(Object.assign({ z }, Lk));
             const p = new A.Panel(Lk.iw || Lk.w, Lk.ih || Lk.h);
             p.gpu = {};
             Object.keys(FIELDS[key]).forEach((f) => {
@@ -437,7 +444,7 @@ class ClassicCluster {
                 cr.uniform(ref, 'u_col', [1, 1, 1, 1]);
                 p.gpu[f] = { ref, at, text: '', col: A.WHITE, cx: 0, unitW: 0, sent: '' };
             });
-            this.panels[key] = { ref: R[key], p };
+            this.panels[key] = { ref: R[key], p, bands: bands ? bands.map((b, i) => ({ b, ref: R[key + '#' + i] })) : null };
         }
         this.panelAt = 0; this.slow = null;
 
@@ -613,7 +620,7 @@ class ClassicCluster {
                 if (!this.sweep && v.rpmSeq != null) {
                     if (v.rpmSeq !== d.rpmSeq) {
                         d.rpmSeq = v.rpmSeq;
-                        const to = lerp(F.A0, F.A1, clamp01((v.rpm || 0) / (d.spec.max || 8000)));
+                        const to = lerp(F.A0, F.A1, clamp01(aimRpm(d, v.rpm || 0, s.needleResponse === 'quick') / (d.spec.max || 8000)));
                         const ms = Math.max(50, Math.min(400, Math.round(v.rpmEvery || ANIM_MS)));
                         if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) { this.glide(d.needle, 'rotate', [round2(d.needleAt)], [round2(to)], null, ms); d.needleAt = to; this.sends++; }
                     }
@@ -666,9 +673,25 @@ class ClassicCluster {
         A.drawStrip(this.panels.strip.p, t.strip);
         for (const k of ['centre', 'left', 'right', 'strip']) {
             const P = this.panels[k], out = P.p.take();
-            if (out.whole) this.cr.pixels(P.ref, null, buf(P.p.cv));
+            if (P.bands) this._sendBands(P, out);
+            else if (out.whole) this.cr.pixels(P.ref, null, buf(P.p.cv));
             else if (out.rects.length) this.cr.pixels(P.ref, FX.fewer(out.rects, FX.MAX_RECTS), cropMany(P.p.cv, FX.fewer(out.rects, FX.MAX_RECTS)));
             if (P.p.gpu) Object.keys(P.p.gpu).forEach((f) => this._readout(P.p.gpu[f]));
+        }
+    }
+
+    /** A panel sent as strips: each strip gets the parts of the changed rectangles inside it. */
+    _sendBands(P, out) {
+        for (const { b, ref } of P.bands) {
+            let rects = out.whole ? [b] : out.rects.map((r) => {
+                const x0 = Math.max(r.x, b.x), y0 = Math.max(r.y, b.y), x1 = Math.min(r.x + r.w, b.x + b.w), y1 = Math.min(r.y + r.h, b.y + b.h);
+                return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+            }).filter(Boolean);
+            if (!rects.length) continue;
+            if (!out.whole) rects = FX.fewer(rects, FX.MAX_RECTS);
+            const data = cropMany(P.p.cv, rects);
+            if (out.whole) this.cr.pixels(ref, null, data);
+            else this.cr.pixels(ref, rects.map((r) => ({ x: r.x - b.x, y: r.y - b.y, w: r.w, h: r.h })), data);
         }
     }
 
@@ -698,7 +721,7 @@ class ClassicCluster {
         if (!this.sweep && v.rpmSeq != null) {
             if (v.rpmSeq !== d.rpmSeq) {
                 d.rpmSeq = v.rpmSeq;
-                const to = lerp(F.A0, F.A1, clamp01((v.rpm || 0) / max));
+                const to = lerp(F.A0, F.A1, clamp01(aimRpm(d, v.rpm || 0, s.needleResponse === 'quick') / max));
                 const ms = Math.max(50, Math.min(400, Math.round(v.rpmEvery || ANIM_MS)));
                 if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) this._preGlide(d, d.needleAt, to, ms, max);
             }
@@ -867,6 +890,23 @@ const later = (fn) => setTimeout(fn, 0);
 
 /** The pixels of rectangle q of a canvas, row by row. */
 function crop(cv, q) { return cropMany(cv, [q]); }
+/**
+ * The rpm a needle glide heads for, on each new rpm from the car. 'smooth': the rpm itself (the
+ * needle shows each one a reading late: glides take the time between readings). 'quick': one
+ * reading ahead (rpm + the last change) while the revs move steadily - the same way, by less than
+ * QUICK_MAX a reading, changing by less than half that - so the needle is about where the engine
+ * is now; across a shift, a blip's turn or a sudden change it aims at the rpm itself, so it never
+ * swings past the other way. d keeps the last reading.
+ */
+const QUICK_MAX = 700;
+function aimRpm(d, rpm, quick) {
+    const delta = d.lastRpm == null ? 0 : rpm - d.lastRpm;
+    const steady = d.lastDelta != null && delta !== 0 && Math.sign(delta) === Math.sign(d.lastDelta) &&
+        Math.abs(delta) <= QUICK_MAX && Math.abs(delta - d.lastDelta) <= QUICK_MAX / 2;
+    d.lastDelta = delta; d.lastRpm = rpm;
+    return quick && steady ? Math.max(0, rpm + delta) : rpm;
+}
+
 function cropMany(cv, rects) {
     const out = Buffer.alloc(rects.reduce((t, q) => t + q.w * q.h * 4, 0));
     let off = 0;
@@ -895,4 +935,4 @@ const clamp01 = (x) => (!(x > 0) ? 0 : x > 1 ? 1 : x);     // NaN and -Infinity:
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
-module.exports = { ClassicCluster, arcTexts, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };
+module.exports = { aimRpm, ClassicCluster, arcTexts, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };

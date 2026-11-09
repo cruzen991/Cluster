@@ -411,11 +411,29 @@ const PL = require('./preload');
         let worst = 0;
         for (let y = 0; y < q.h; y++) for (let x = 0; x < q.w; x++) {
             const i = ((q.y + y) * 540 + q.x + x) * 4;
-            const g = PL.readoutShade(spec96, at.cv.d, u, x + 0.5, y + 0.5);
+            const g = PL.readoutShade(spec96, at.r8, u, x + 0.5, y + 0.5);
             const panelA = p1.cv.d[i + 3], shown = Math.max(g[3], panelA);        // figures (GPU) + unit (pixels)
             worst = Math.max(worst, Math.abs(shown - p0.cv.d[i + 3]));
         }
         assert(worst <= 40, key + ': GPU figures differ from the drawn ones by ' + worst);
+    }
+    assert(/\)\.r;/.test(PL.readoutShader(10, 10, at)) && at.r8.length === at.cv.w * at.cv.h, 'atlases are r8, read in .r');
+    // every cell the readout panels draw lies inside the strips they are sent as
+    for (const [key, draw, gpu] of [['left', A.drawLeft, ['oil', 'cool']], ['right', A.drawRight, ['boost', 'torque']], ['centre', A.drawCentre, ['gear', 'speed']]]) {
+        const W0 = key === 'centre' ? 300 : 540, H0 = key === 'centre' ? 300 : 500;
+        const p = new A.Panel(W0, H0);
+        p.gpu = {}; gpu.forEach((f) => { p.gpu[f] = {}; });
+        const vals = [
+            { oil: '-5', cool: '--', tu: '°C', fuel: 0, range: '---', boost: '0', torque: '-100', tq: 'NM', odo: '0 KM', peak: '', gear: 'P', speed: '0', unit: 'KM/H' },
+            { oil: '302', cool: '250', tu: '°F', oilWarn: true, coolWarn: true, fuel: 1, range: '1,234 MI', boost: '29', torque: '999', tq: 'LB-FT', odo: '999,999 MI', peak: 'PEAK 29', gear: 'D8', speed: '188', unit: 'MPH' },
+            { oil: '88', cool: '9', tu: '°F', fuel: null, range: '', boost: '--', torque: '--', tq: 'LB-FT', odo: '', peak: 'PEAK 9', gear: '-', speed: '---', unit: 'MPH' },
+        ];
+        vals.forEach((v) => { draw(p, v); const out = p.take(); (out.whole ? [] : out.rects).forEach((r) => {
+            assert(PL.PANEL_BANDS[key].some((b) => r.x >= b.x && r.y >= b.y && r.x + r.w <= b.x + b.w && r.y + r.h <= b.y + b.h), key + ': a change outside the strips ' + JSON.stringify(r));
+        }); });
+        for (let y = 0; y < H0; y++) for (let x = 0; x < W0; x++) if (p.cv.d[(y * W0 + x) * 4 + 3]) {
+            assert(PL.PANEL_BANDS[key].some((b) => x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h), key + ': ink outside the strips at ' + x + ',' + y);
+        }
     }
     assert.deepStrictEqual(PL.readoutUniforms(at, '--', 100, 0).g.slice(0, 2), [10, 10]);
     assert.deepStrictEqual(PL.readoutUniforms(at, '', 100, 0).g, [-1, -1, -1, -1]);
@@ -428,6 +446,38 @@ const PL = require('./preload');
     const nd = require('./app.json').settings.find((x) => x.key === 'needles');
     assert.strictEqual(nd.default, 'preload');
     assert(nd.options.some((x) => x[0] === 'rotate'), 'the rotating layer stays a choice (and the fallback)');
+}
+
+/* needle response: 'quick' aims a reading ahead while the revs move steadily, never past a shift */
+{
+    const { aimRpm } = require('./cluster');
+    // the engine: a pull in 3rd, a shift, a pull in 4th, a lift; readings 9 a second (111 ms), as on the car
+    const engine = (t) => t < 1.5 ? 2500 + 3000 * t : t < 1.7 ? 7000 - (t - 1.5) * 13000 : t < 3.5 ? 4400 + 1300 * (t - 1.7) : Math.max(1500, 6740 - 4000 * (t - 3.5));
+    const run = (quick) => {
+        const d = {};
+        let from = engine(0), to = from, t0 = 0, err = 0, n = 0, under = 0, over = 0;
+        for (let k = 0; k * 0.111 < 4.5; k++) {
+            const t = k * 0.111, aim = aimRpm(d, engine(t), quick);
+            for (let tt = t; tt < t + 0.111; tt += 0.01) {                 // the needle, gliding over the interval
+                const shown = from + (to - from) * Math.min(1, (tt - t0) / 0.111), e = shown - engine(tt);
+                err += Math.abs(e); n++; under = Math.min(under, e); over = Math.max(over, e);
+            }
+            from = from + (to - from) * Math.min(1, (t - t0) / 0.111); to = aim; t0 = t;
+        }
+        return { mean: err / n, under, over };
+    };
+    const smooth = run(false), quick = run(true);
+    assert(quick.mean < smooth.mean * 0.75, 'quick is closer to the engine: ' + quick.mean.toFixed(0) + ' vs ' + smooth.mean.toFixed(0) + ' rpm');
+    // the worst moments (the needle still above the engine after a shift: the lag itself) no worse than smooth's
+    assert(quick.over <= smooth.over + 350 && quick.under >= smooth.under - 350, 'quick never swings past by more: ' + JSON.stringify({ quick, smooth }));
+    // across the shift (a 2,600 rpm drop) quick aims at the rpm itself
+    const d = {};
+    [5800, 6100, 6400, 6700].forEach((r) => aimRpm(d, r, true));
+    assert.strictEqual(aimRpm(d, 6700 + 300, true), 7300, 'steady: one reading ahead');
+    assert.strictEqual(aimRpm(d, 4400, true), 4400, 'the shift: no prediction');
+    assert.strictEqual(aimRpm(d, 4450, true), 4450, 'the turn after it: none');
+    assert.strictEqual(aimRpm(d, 4500, true), 4550, 'steady again');
+    assert.strictEqual(aimRpm({}, 3000, false), 3000);
 }
 
 /* the cluster pre-loaded, with a stand-in client: what it sends at start and while driving */
@@ -453,6 +503,10 @@ function preloadDrive(done) {
         const made = sent.filter((m) => ['image', 'effect'].includes(m.op));
         assert(made.length > 8 && made.length <= 64, made.length + ' layers');
         assert.strictEqual(sent.filter((m) => m.op === 'asset').length, 3);
+        // within cluster-render's 16 MB with room for the Shift HUD (about 2.5 MB): it counts every
+        // picture twice (its pixels and a scratch copy), an r8 asset at a byte a pixel
+        const mem = sent.filter((m) => m.op === 'image' || m.op === 'asset').reduce((a, m) => a + (m.o.iw || m.o.w) * (m.o.ih || m.o.h) * (m.o.format === 'r8' ? 1 : 4) * 2, 0);
+        assert(mem < 12.5 * 1048576, 'pre-loaded uses ' + (mem / 1048576).toFixed(2) + ' MB of the renderer\'s 16');
         assert.strictEqual(cl.mode, 'preload');
         assert(sent.filter((m) => m.op === 'bind').length === 6, 'six readouts bound to atlases');
         let t = Date.now(), seq = 0;

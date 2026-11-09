@@ -54,7 +54,9 @@ function sectorPts(r0, r1, a0, a1) {
 const REACH = 9.5;       // degrees past A1 a cover may ever reach: the face's backdrop goes 10 past it (the mask covers it)
 const EPS = 0.35;        // a cover reaches this far (about a pixel) past both ends of its piece, so the soft
                          // edge the renderer's turning gives it never lets the lit arc peek out
-const OVER = 1;          // a cover turns this far past its piece's end, so its edge rests inside the next
+const OVER = 1;
+const CAP = 60;          // no piece longer than this: a long piece's rectangle is mostly empty, and cluster-render
+                         // counts every picture's pixels twice against its 16 MB          // a cover turns this far past its piece's end, so its edge rests inside the next
                          // piece (under that piece's lit arc), not on the seam
 const TAIL = REACH;
 /**
@@ -65,7 +67,7 @@ const TAIL = REACH;
 function ringPieces() {
     const sizes = [];
     let rest = F.A1 - F.A0, after = 0;
-    while (rest > 1e-9) { const p = Math.min(rest, after + REACH - EPS - OVER); sizes.unshift(p); rest -= p; after += p; }
+    while (rest > 1e-9) { const p = Math.min(rest, after + REACH - EPS - OVER, CAP); sizes.unshift(p); rest -= p; after += p; }
     const out = [];
     let a = F.A0;
     sizes.forEach((p) => { out.push({ s: a, e: a + p }); a += p; });
@@ -182,12 +184,24 @@ function numeralScale(rpm, n) {
 /* ---------- readouts: glyph atlases and the shader that draws from them ---------- */
 
 const FIGS = '0123456789-';
-const GEAR_GLYPHS = 'PRNDMS0123456789-';
+const GEAR_GLYPHS = 'PRND0123456789-';
 const SLOTS = 4;
 
 /**
- * A glyph atlas: cells side by side, white with the glyph's coverage as alpha (RGBA: r8 sampling
- * differs between GPUs). kind 'tabular': figures of `size` in fixed slots dw wide, as tabular()
+ * The strips of each readout panel that ever hold anything (panel pixels): the panel is drawn whole
+ * here, but sent as these strips only (the GPU draws the figures between them). Every cell the
+ * panels draw lies inside one (test.js).
+ */
+const PANEL_BANDS = {
+    left: [{ x: 0, y: 0, w: 540, h: 60 }, { x: 0, y: 128, w: 540, h: 40 }, { x: 0, y: 196, w: 540, h: 40 }, { x: 0, y: 308, w: 540, h: 40 }, { x: 0, y: 396, w: 540, h: 96 }],
+    centre: [{ x: 0, y: 250, w: 300, h: 40 }],
+};
+PANEL_BANDS.right = PANEL_BANDS.left;
+
+/**
+ * A glyph atlas: cells side by side, the glyphs' coverage. Drawn white in a canvas (cv), sent as one
+ * byte a pixel (r8: r8, the coverage), which shaders read in .r - as cluster-render's own video
+ * atlases are read on the car - and which it counts at a quarter of RGBA. kind 'tabular': figures of `size` in fixed slots dw wide, as tabular()
  * draws them, baseline `base` in a cell `h` tall; kind 'gear': the gear's letters and figures as
  * bigText() draws them (118 px), each from its cell's left edge, with its advance.
  * Returns { cv, cw, h, glyphs, adv: {ch: px} }.
@@ -206,7 +220,9 @@ function atlas(kind, size, h, base) {
         if (kind === 'gear') A.bigText(cv, ch, i * cw + adv[ch] / 2, base, size, '#ffffff');
         else { cv.text(ch, i * cw + cw / 2, base, size, '#ffffff', { font: 'orb', align: 'center', literal: true }); adv[ch] = cw; }
     });
-    return { cv, cw, h, glyphs, adv, kind };
+    const r8 = Buffer.alloc(cv.w * cv.h);
+    for (let i = 0; i < r8.length; i++) r8[i] = cv.d[i * 4 + 3];
+    return { cv, r8, cw, h, glyphs, adv, kind };
 }
 
 /**
@@ -234,7 +250,7 @@ function readoutShader(w, h, at) {
         'float glyph(float x0, float g, vec2 p) {',
         '  float lx = p.x - x0;',
         '  if (g < 0.0 || lx < 0.0 || lx >= ' + f(at.cw) + ') return 0.0;',
-        '  return texture2D(u_font, vec2((g * ' + f(at.cw) + ' + lx) / ' + f(at.cv.w) + ', p.y / ' + f(at.h) + ')).a;',
+        '  return texture2D(u_font, vec2((g * ' + f(at.cw) + ' + lx) / ' + f(at.cv.w) + ', p.y / ' + f(at.h) + ')).r;',
         '}',
         'void main() {',
         '  vec2 p = v_uv * vec2(' + f(w) + ', ' + f(h) + ');',
@@ -244,7 +260,8 @@ function readoutShader(w, h, at) {
     ].join('\n');
 }
 
-/** The shader's twin (tests, the desk stand-in): RGBA 0..255 at image pixel (x, y) (centres at +0.5). */
+/** The shader's twin (tests, the desk stand-in): RGBA 0..255 at image pixel (x, y) (centres at +0.5);
+ * atlasPx: the r8 atlas (one byte a pixel). */
 function readoutShade(spec, atlasPx, u, x, y) {
     const p = [x, y];
     let a = 0;
@@ -254,7 +271,7 @@ function readoutShade(spec, atlasPx, u, x, y) {
         // bilinear, as the asset is sampled
         const tx = g * spec.cw + lx - 0.5, ty = p[1] * spec.ah / spec.h - 0.5;
         const x0 = Math.floor(tx), y0 = Math.floor(ty), fx = tx - x0, fy = ty - y0;
-        const at = (xx, yy) => { xx = Math.max(0, Math.min(spec.aw - 1, xx)); yy = Math.max(0, Math.min(spec.ah - 1, yy)); return atlasPx[(yy * spec.aw + xx) * 4 + 3]; };
+        const at = (xx, yy) => { xx = Math.max(0, Math.min(spec.aw - 1, xx)); yy = Math.max(0, Math.min(spec.ah - 1, yy)); return atlasPx[yy * spec.aw + xx]; };
         const v = (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) + (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
         a = Math.max(a, v / 255);
     }
@@ -293,5 +310,5 @@ function dialArt(face, nums, spec) {
 
 module.exports = {
     PIECES, TAIL, REACH, EPS, OVER, SNAP, ringPieces, litPiece, coverPiece, trackFace, ringMask, coverTurn, coverKeys, lightSprite,
-    numeralScale, atlas, readoutShader, readoutShade, readoutUniforms, dialArt, FIGS, GEAR_GLYPHS, SLOTS,
+    numeralScale, atlas, readoutShader, readoutShade, readoutUniforms, dialArt, FIGS, GEAR_GLYPHS, SLOTS, PANEL_BANDS, CAP,
 };

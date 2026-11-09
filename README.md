@@ -246,11 +246,11 @@ Advice from the author of waze-on-cluster: stream pixels only for video (CarPlay
 **pre-load everything else and let the cluster's GPU draw it** at its own frame rate, with almost nothing on the
 link. 0.13.0 does this for the Arc style (setting *Drawing: Pre-loaded*, the default):
 
-- **Everything is sent once, at the start** (about 9 MB: 2-4 s at cluster-render's upload budget). After that,
+- **Everything is sent once, at the start** (about 6 MB: 1-3 s at cluster-render's upload budget). After that,
   while driving, the dial sends **no pixels at all**, and the readouts only a few small rectangles
   (a unit moving when a figure count changes, or the peak).
 - **The needle:** a still sprite the renderer turns, one animation per new rpm from the car (as before).
-- **The lit rpm arc:** five lit pieces, each under a cover (the unlit track) that the renderer turns with the
+- **The lit rpm arc:** seven lit pieces, each under a cover (the unlit track) that the renderer turns with the
   needle, on the same animation's path; so the arc grows and shrinks exactly under the needle, every frame, with
   no pixels. A still copy of the face past the arc's end hides the covers' far ends.
 - **The growing numerals:** each numeral a still sprite at its largest size, scaled by the renderer (animated
@@ -261,9 +261,23 @@ link. 0.13.0 does this for the Arc style (setting *Drawing: Pre-loaded*, the def
 - **Desk-measured:** the same hard drive as below sends about **12 KB/s** (was 500-1,000 KB/s with the rotating
   layer), and the picture matches the old one to within a few levels at every needle angle (`test.js`).
 
-**Needs cluster-render 0.4.2 or later** (64 layers a client, assets; it uses about 45 layers and 3 assets). With an
+**Needs cluster-render 0.4.2 or later** (64 layers a client, assets; it uses about 56 layers and 3 assets). With an
 older one, cluster-render refuses layer 9 and the app goes back to the rotating layer by itself; the app's screen
-then says *Pre-loaded off ... update cluster-render*. Not yet seen on a car: if the readouts' figures are missing
+then says *Pre-loaded off ... update cluster-render*.
+
+**Memory (0.13.2):** cluster-render keeps every picture twice (its pixels and a scratch copy) in 16 MB shared by
+every app using it. 0.13.0-0.13.1 needed 17.5 MB that way and were refused (*the service's pixel memory is
+full*). 0.13.2 needs 12 MB: the readout panels are sent as the strips that hold anything (the GPU draws the
+figures between them), the glyph atlases are one byte a pixel (r8, as cluster-render's own video atlases), and the
+lit arc's pieces are shorter (smaller rectangles). With the Shift HUD on too (2.5 MB) that is 14.5 MB. If the
+renderer still runs out (other apps on it), the app goes back to the rotating layer (11 MB) and its screen says so.
+
+**Needle response (0.13.2):** the car sends a new rpm about 9 times a second (the app's screen shows it). *Smooth*
+(default): the needle glides from each reading to the next over the time between them, so it shows each one a
+reading (about 110 ms) late. *Quick*: while the revs move steadily it aims one reading ahead, so it is about where
+the engine is now; across a shift, a blip or any sudden change it aims at the reading itself, so it never swings
+past the other way. In a simulated hard pull with a shift, *Quick* trails the engine by about 260 rpm on average,
+*Smooth* by about 450. Not yet seen on a car: if the readouts' figures are missing
 or the arc looks wrong, set *Drawing* to *Rotating layer* and send a photo of the app's screen.
 
 Bug-tested in 0.13.1 (desk only): the shaders compiled and run by a real GLSL ES 1.00 compiler (WebGL in
