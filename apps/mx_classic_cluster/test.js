@@ -503,7 +503,7 @@ function preloadDrive(done) {
         const made = sent.filter((m) => ['image', 'effect'].includes(m.op));
         assert(made.length > 8 && made.length <= 64, made.length + ' layers');
         assert.strictEqual(sent.filter((m) => m.op === 'asset').length, 3);
-        // within cluster-render's 16 MB with room for the Shift HUD (about 2.5 MB): it counts every
+        // within cluster-render's 16 MB with room for other apps on it: it counts every
         // picture twice (its pixels and a scratch copy), an r8 asset at a byte a pixel
         const mem = sent.filter((m) => m.op === 'image' || m.op === 'asset').reduce((a, m) => a + (m.o.iw || m.o.w) * (m.o.ih || m.o.h) * (m.o.format === 'r8' ? 1 : 4) * 2, 0);
         assert(mem < 12.5 * 1048576, 'pre-loaded uses ' + (mem / 1048576).toFixed(2) + ' MB of the renderer\'s 16');

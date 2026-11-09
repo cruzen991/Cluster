@@ -217,7 +217,7 @@ mgu.run({
                 }).join(' | ');
                 const sweepNote = sweepMsg && Date.now() - sweepMsg.at < 4000 ? '  Sweep: ' + sweepMsg.text : (st.sweeping ? '  Sweeping' : '');
                 const lines = ['Layers: ' + st.layers + ' of ' + (st.mode === 'preload' ? 64 : 8) + '   Drawing: ' + (st.mode === 'preload' ? 'pre-loaded' : st.mode) + '   rpm from the car: ' + (v.live ? Math.round(1000 / Math.max(1, v.rpmEvery)) + ' a second' : '-') + sweepNote]
-                    .concat(st.preloadOff ? wrap('Pre-loaded off (' + st.preloadOff + ')' + (/memory/.test(st.preloadOff) ? ': other apps on the cluster renderer (Shift HUD, maps) use its memory; turn one off and restart this' : /too many layers/.test(st.preloadOff) ? ': update cluster-render to 0.4.2 or later' : ''), 74) : [])
+                    .concat(st.preloadOff ? wrap('Pre-loaded off (' + st.preloadOff + ')' + (/memory/.test(st.preloadOff) ? ': other apps on the cluster renderer (maps, say) use its memory; turn one off and restart this' : /too many layers/.test(st.preloadOff) ? ': update cluster-render to 0.4.2 or later' : ''), 74) : [])
                     .concat(wrap(groups, 74))
                     .concat(st.refused ? wrap('Refused ' + st.refused + ': ' + st.lastRefused, 74) : []);
                 lines.slice(0, 5).forEach((line, i) => cv.text(line, mid, 420 + i * 22, 17, t.dim, { align: 'center', literal: true }));
