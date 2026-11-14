@@ -487,6 +487,62 @@ const PL = require('./preload');
     assert(liveGlide(g, 6500, 111, true, 8000).ms > 100);
 }
 
+/* the renderer client: a batch's messages leave in one write */
+{
+    const CR = require('./cluster_render_client');
+    const Cls = CR.ClusterRender || CR;
+    const cr = new Cls('test', '/nonexistent');
+    const log = [];
+    let corked = 0;
+    cr.sock = { cork() { corked++; log.push('cork'); }, uncork() { corked--; log.push('uncork'); }, write(m) { log.push(corked ? 'w' : 'W'); return true; } };
+    cr.connected = true;
+    const ref = cr.image({ target: 'panel', x: 0, y: 0, w: 4, h: 4 });
+    log.length = 0;
+    cr.batch(() => { cr.set(ref, { rotate: 1 }); cr.set(ref, { rotate: 2 }); cr.set(ref, { visible: false }); });
+    assert.deepStrictEqual(log, ['cork', 'w', 'w', 'w', 'uncork'], 'one write: ' + log.join(' '));
+    log.length = 0;
+    assert.throws(() => cr.batch(() => { cr.set(ref, { rotate: 3 }); throw new Error('x'); }));
+    assert.deepStrictEqual(log, ['cork', 'w', 'uncork'], 'uncorked even on an error');
+    cr.sock = null; cr.batch(() => cr.set(ref, { rotate: 4 }));            // not connected: runs, sends nothing
+}
+
+/* the rpm source: CDS until the basic data set's engine speed is proven the same and faster */
+{
+    const { RpmSource, MATCHES } = require('./rpmsource');
+    const got = [];
+    const r = new RpmSource((rpm, every) => got.push([rpm, Math.round(every)]));
+    let t = 0;
+    for (let k = 0; k < 30; k++) { t += 111; r.feed('cds', 2000 + k * 20, t); }
+    assert.strictEqual(got.length, 30, 'CDS readings go through');
+    assert(Math.abs(got[29][1] - 111) <= 2, 'its rate');
+    // the basic data set, raw at 0.25 rpm a step, 4 times as often: learned, then used
+    got.length = 0;
+    let cds = 2600;
+    for (let k = 0; k < 120; k++) {
+        t += 28;
+        if (k % 4 === 0) { cds = 2600 + k * 5; r.feed('cds', cds, t); }
+        r.feed('bds', (2600 + k * 5) * 4, t);
+    }
+    assert.strictEqual(r.scale, 0.25, 'its scale learned');
+    assert.strictEqual(r.using, 'bds', 'the faster source used');
+    const late = got.slice(-20);
+    assert(late.every(([v, e]) => e < 40), 'readings at its rate');
+    assert(/basic data/.test(r.describe(t)));
+    // it stops: back to CDS
+    for (let k = 0; k < 10; k++) { t += 111; r.feed('cds', 3000 + k, t); }
+    assert.strictEqual(r.using, 'cds', 'a silent source is dropped');
+    // a source that says something else is never used
+    const r2 = new RpmSource(() => {});
+    t = 0;
+    for (let k = 0; k < 200; k++) { t += 30; if (k % 4 === 0) r2.feed('cds', 3000, t); r2.feed('bds', 777 + (k % 3), t); }
+    assert.strictEqual(r2.scale, null); assert.strictEqual(r2.using, 'cds');
+    // nor one no faster than CDS
+    const r3 = new RpmSource(() => {});
+    t = 0;
+    for (let k = 0; k < MATCHES * 3; k++) { t += 111; r3.feed('cds', 2000 + k * 10, t); r3.feed('bds', (2000 + k * 10) * 4, t + 5); }
+    assert.strictEqual(r3.scale, 0.25); assert.strictEqual(r3.using, 'cds', 'as fast: CDS kept');
+}
+
 /* the gear readout: D3, S3 in the sport gate, the number alone while shifting by hand */
 {
     const { GearMode, TEMP_MANUAL_MS } = require('./gearmode');
@@ -518,6 +574,7 @@ const PL = require('./preload');
 
 /* the cluster pre-loaded, with a stand-in client: what it sends at start and while driving */
 function preloadDrive(done) {
+    const lerpA = (r) => F.A0 + (F.A1 - F.A0) * r / 8000;
     const C = require('./cluster');
     const sent = [], layers = new Map();
     let next = 1;
@@ -601,6 +658,20 @@ function preloadDrive(done) {
         assert(Math.abs(sw[sw.length - 1] - F.A0) < 0.5, 'and back to rest: ' + sw[sw.length - 1]);
         assert(!cl.sweep, 'the sweep over');
         assert.strictEqual(sent.filter(isAnim).length, 0, 'still no renderer animations');
+        // a reading pushed as it comes sets the needle off at once; the tick's older copy of the
+        // values then changes nothing, and a newer one is taken
+        {
+            const d = cl.dials.tach, base = seq + 100;
+            cl._reading(d, s, 5000, base, 111, t);
+            const aim = d.needleAt;
+            assert(d.glideNow && d.glideNow.t0 === t && Math.abs(aim - lerpA(5000)) < 0.01, 'the push starts the glide');
+            Object.assign(cl.values, { live: true, rpm: 2000, rpmSeq: base - 1, rpmEvery: 111 });
+            t += 33; cl.tick(33, t);
+            assert.strictEqual(d.needleAt, aim, 'an older reading in the tick is ignored');
+            Object.assign(cl.values, { rpm: 5200, rpmSeq: base + 1 });
+            t += 33; cl.tick(33, t);
+            assert(Math.abs(d.needleAt - lerpA(5200)) < 0.01, 'a newer one is taken');
+        }
         // a refusal (an older cluster-render) turns the pre-loaded mode off and rebuilds
         cl.preloadFailed(fake, 'layer refused: too many layers');
         setTimeout(() => {

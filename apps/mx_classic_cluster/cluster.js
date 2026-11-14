@@ -116,16 +116,22 @@ class ClassicCluster {
 
     /** Starts the needle loop; the cluster itself waits for enable(true). */
     start() {
+        // one loop: the needle's place every frame (MOTION_FPS), the rest (tick) every other frame, the
+        // two in one write to the renderer (_batched), so they reach the cluster in the same flush
         let last = Date.now();
-        this.timer = setInterval(() => {
-            const now = Date.now();
-            try { this.tick(now - last, now); } catch (e) { if (this.opts.onError) this.opts.onError(e); }
-            last = now;
-        }, 1000 / FPS);
         this.motionTimer = setInterval(() => {
-            try { this.motion(Date.now()); } catch (e) { if (this.opts.onError) this.opts.onError(e); }
+            const now = Date.now();
+            try {
+                this._batched(() => {
+                    if (now - last >= 1000 / FPS - 4) { this.tick(now - last, now); last = now; }
+                    this.motion(now);
+                });
+            } catch (e) { if (this.opts.onError) this.opts.onError(e); }
         }, 1000 / MOTION_FPS);
     }
+
+    /** fn's messages to the renderer in one write (cluster_render_client.js batch()). */
+    _batched(fn) { return this.cr && typeof this.cr.batch === 'function' ? this.cr.batch(fn) : fn(); }
 
     stop() {
         if (this.timer) clearInterval(this.timer);
@@ -626,14 +632,7 @@ class ClassicCluster {
             // moves all the time, a sample behind); else (demo) every ANIM_MS; the sweep by its curve
             if (d.needle) {
                 if (!this.sweep && v.rpmSeq != null) {
-                    if (v.rpmSeq !== d.rpmSeq) {
-                        d.rpmSeq = v.rpmSeq;
-                        const { to, ms } = liveGlide(d, v.rpm || 0, v.rpmEvery, s.needleResponse === 'quick', d.spec.max || 8000);
-                        if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) {
-                            const from = glideAt(d, now);
-                            d.needleAt = to; d.glideNow = { from, to, t0: now, ms };
-                        }
-                    }
+                    this._reading(d, s, v.rpm || 0, v.rpmSeq, v.rpmEvery, now);
                 } else if (!this.sweep && Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG && now - (d.needleAnimAt || 0) >= ANIM_MS) {
                     const from = glideAt(d, now), ms = Math.round(ANIM_MS * GLIDE_STRETCH);
                     d.needleAt = a; d.needleAnimAt = now; d.glideNow = { from, to: a, t0: now, ms };
@@ -729,11 +728,7 @@ class ClassicCluster {
     _preDial(s, v, d, a, lv, now) {
         const max = d.spec.max || 8000;
         if (!this.sweep && v.rpmSeq != null) {
-            if (v.rpmSeq !== d.rpmSeq) {
-                d.rpmSeq = v.rpmSeq;
-                const { to, ms } = liveGlide(d, v.rpm || 0, v.rpmEvery, s.needleResponse === 'quick', max);
-                if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) { d.glideNow = { from: glideAt(d, now), to, t0: now, ms }; d.needleAt = to; }
-            }
+            this._reading(d, s, v.rpm || 0, v.rpmSeq, v.rpmEvery, now);
         } else if (!this.sweep && Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG && now - (d.needleAnimAt || 0) >= ANIM_MS) {
             d.glideNow = { from: glideAt(d, now), to: a, t0: now, ms: Math.round(ANIM_MS * GLIDE_STRETCH) };
             d.needleAt = a; d.needleAnimAt = now;
@@ -756,6 +751,26 @@ class ClassicCluster {
      * much. cluster-render applies sets once a tick (30 a second); this sends twice as often, so each
      * of its ticks has a fresh place, and only what moved.
      */
+    /**
+     * A new rpm from the car, as it comes (main.js), so the needle sets off at once rather than at
+     * the next tick (which waited up to two 33 ms timers: the app's read loop, then this tick).
+     * The tick still takes the reading if this missed it (sweeping, rebuilding); seq is never taken twice.
+     */
+    reading(rpm, seq, every) {
+        if (!this.enabled || !this.cr || !this.dials || this.sweep) return;
+        const d = this.dials.tach;
+        if (!d || !d.needle || (this.mode !== 'rotate' && this.mode !== 'preload')) return;
+        try { this._reading(d, this.getSettings(), rpm, seq, every, Date.now()); } catch (e) { if (this.opts.onError) this.opts.onError(e); }
+    }
+
+    /** The needle's next glide for reading seq (rotating and pre-loaded modes). */
+    _reading(d, s, rpm, seq, every, now) {
+        if (seq === d.rpmSeq || d.rpmSeq > seq) return;
+        d.rpmSeq = seq;
+        const { to, ms } = liveGlide(d, rpm, every, s.needleResponse === 'quick', d.spec.max || 8000);
+        if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) { d.glideNow = { from: glideAt(d, now), to, t0: now, ms }; d.needleAt = to; }
+    }
+
     motion(now) {
         if (!this.enabled || !this.cr || !this.dials || !this.dials.tach) return;
         const d = this.dials.tach;

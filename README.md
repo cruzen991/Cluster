@@ -258,6 +258,20 @@ times a second. While driving, each glide now starts where the needle is and las
 time between rpms (x1.15), so the needle never stops waiting for the next one. Measured on the desk: the sweep
 went from 9-15 stops to none (only the planned hold at the top); driving from about 20 stops in 5 s to none.
 
+**Faster and steadier (0.14.0):**
+- *Each frame in one write.* The needle, the lit arc, the numerals and the shift lights for a frame now go to
+  cluster-render as one write, so it flushes them together: the arc can no longer trail the needle by a frame, and
+  the service wakes about 60 times a second instead of about 200.
+- *One loop.* The 30 Hz tick and the 60 Hz needle loop are one 60 Hz loop (the tick every other frame), so their
+  messages never go as two flushes a millisecond apart. Half the CPU time of the needle loop on the desk.
+- *rpm straight to the needle.* A new rpm from the car starts the needle's glide as it arrives; it used to wait for
+  the app's 30 Hz read loop and then the cluster's 30 Hz tick (about 33 ms on average, up to 66). In a simulated
+  pull with shifts the needle is 90% of the way to the new rpm about 55 ms after the reading, from about 90.
+- *A second rpm signal, if it is faster.* `BasicDataSet.statusEngineSpeed` (on the feed the gear display already
+  uses) is checked against CDS's rpm: once it is shown to agree (its scale learned from 15 matching pairs) and it
+  brings new values more often than CDS, it drives the needle; otherwise, or if it goes quiet, CDS does. The app's
+  screen says which (`rpm from the car: 9/s CDS, basic data 4/s`). Not yet seen on a car.
+
 **Shifts (0.13.7):** a reading that jumps 800 rpm or more from the last one (an upshift, a downshift blip, the clutch
 let in) is shown in 50 ms instead of glided over the time to the next reading, so the needle drops with the shift
 about 75 ms sooner. A pull never jumps that much in one reading, so it still glides. What is left is the car's: a

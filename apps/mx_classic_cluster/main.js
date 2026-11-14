@@ -19,6 +19,7 @@ const Car = require('./kit/car');
 const F = require('./faces');
 const { ClassicCluster, tachMax } = require('./cluster');
 const { Guard } = require('./guard');
+const { RpmSource } = require('./rpmsource');
 
 const W = 1600, H = 520;
 const STALE_MS = 1500;
@@ -68,6 +69,10 @@ mgu.run({
         // outside temperature (raw x 0.5 - 40 deg C, 255 = none; the kit apps' scaling), for the arc style
         let outsideC = null, outsideAt = 0;
         const gm = new GearMode();
+        // the engine speed: from whichever signal comes more often (rpmsource.js); each new reading
+        // goes to the needle at once, not at the next tick of the read loop below
+        let rpmSeq = 0, rpmNow = 0, rpmEvery = 111, pushReading = () => {};
+        const rpmSrc = new RpmSource((rpm, every) => { rpmNow = rpm; rpmEvery = every; rpmSeq++; pushReading(rpm, rpmSeq, every); });
         const seenVals = {};
         const seen = (what, raw) => {
             const k = what + ':' + JSON.stringify(raw);
@@ -89,7 +94,14 @@ mgu.run({
             // the gear readout's D / S / manual (gearmode.js): the gearbox's own display data, else the
             // lever and the paddles; each first value logged, to see what this car sends
             [MDRIVE]: { dataDisplayGearbox: (v) => { const r = v && v.displayProgramGearbox; seen('gearbox program', r); gm.onProgram(r); } },
-            [BASIC]: { basicDataSet: (v) => { const r = v && v.operationGearSelectorSwitch; if (r === undefined) return; seen('lever', r); gm.onLever(r, Date.now()); } },
+            [BASIC]: { basicDataSet: (v) => {
+                if (!v) return;
+                const q = v.qualifierStatusEngineSpeed;
+                if (typeof v.statusEngineSpeed === 'number' && (q === undefined || q === 1 || q === 2 || q === 'SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT' || q === 'SIGNALWERT_IST_GUELTIG_NOCKENWELLENNOTLAUF')) {
+                    if (!seenVals.bdsRpm) { seenVals.bdsRpm = true; log.info('basic data engine speed ' + v.statusEngineSpeed + ' (raw)'); } rpmSrc.feed('bds', v.statusEngineSpeed, Date.now());
+                }
+                const r = v.operationGearSelectorSwitch; if (r === undefined) return; seen('lever', r); gm.onLever(r, Date.now());
+            } },
             [FES]: {
                 operationPaddleSwitch: (v) => { const r = v && v.operationPaddleSwitch; seen('paddle', r); gm.onPaddle(r, Date.now()); },
                 statusFESVehicleDynamicSwitchHMI: (v) => {
@@ -106,14 +118,10 @@ mgu.run({
         car.setRedline(S().redline);
         let lastTick = 0;
         // how often the car sends a new rpm: the needle glides from one to the next over that time
-        let rpmSeq = 0, rpmLast = null, rpmAt = 0, rpmEvery = 100;
+        let rpmLast = null;
         car.onSample((d, t) => {
             lastTick = Date.now();
-            if (typeof d.rpm === 'number' && d.rpm !== rpmLast) {
-                const now = Date.now();
-                if (rpmAt && now - rpmAt < 1000) rpmEvery += ((now - rpmAt) - rpmEvery) * 0.2;
-                rpmLast = d.rpm; rpmAt = now; rpmSeq++;
-            }
+            if (!d.demo && typeof d.rpm === 'number' && d.rpm !== rpmLast) { rpmLast = d.rpm; rpmSrc.feed('cds', d.rpm, lastTick); }
         }, () => { lastTick = 0; });
 
         /* ---------- on / off, and the guard that turns it off by itself ---------- */
@@ -128,6 +136,7 @@ mgu.run({
             onDisconnected: () => guard.disconnected(),
             onError: (e) => guard.error(e),
         });
+        pushReading = (rpm, seq, every) => cluster.reading(rpm, seq, every);
         const apply = () => {
             const on = S().on;
             if (on && !cluster.enabled) guard.want();
@@ -196,7 +205,7 @@ mgu.run({
             const fuel = d.demo ? 0.62 : fuelL === null ? null : fuelL / s.tank;
             const boostPsi = d.demo ? Math.max(0, Math.min(19, ((d.rpm || 0) - 1500) / 3500 * 19)) : boostPsiOf(boostBar, boostAt, now, s.boostRef);
             return {
-                speed, rpm: d.rpm || 0, rpmSeq: d.demo ? null : rpmSeq, rpmEvery, fuel, oil: oilDial, oilC, boostPsi, boost: boostPsi === null ? null : boostPsi / F.BOOST_MAX,
+                speed, rpm: d.demo ? d.rpm || 0 : rpmNow, rpmSeq: d.demo ? null : rpmSeq, rpmEvery, fuel, oil: oilDial, oilC, boostPsi, boost: boostPsi === null ? null : boostPsi / F.BOOST_MAX,
                 coolC: typeof d.coolant === 'number' ? d.coolant : null, torqueNm: typeof d.torque === 'number' ? d.torque : null,
                 speedText: String(Math.round(speed)), gearText: gearText(d, gm), live: !d.demo,
                 rangeText: info.rangeText, odoText: info.odoText, modeText: info.modeText, outsideC: info.outsideC, iatC: info.iatC,
@@ -231,7 +240,7 @@ mgu.run({
                     return n + ' ' + Object.keys(g.counts).map((k) => g.counts[k] + ' ' + k).join('/') + (g.why ? ' (' + g.why + ')' : '');
                 }).join(' | ');
                 const sweepNote = sweepMsg && Date.now() - sweepMsg.at < 4000 ? '  Sweep: ' + sweepMsg.text : (st.sweeping ? '  Sweeping' : '');
-                const lines = ['Layers: ' + st.layers + ' of ' + (st.mode === 'preload' ? 64 : 8) + '   Drawing: ' + (st.mode === 'preload' ? 'pre-loaded' : st.mode) + '   rpm from the car: ' + (v.live ? Math.round(1000 / Math.max(1, v.rpmEvery)) + ' a second' : '-') + sweepNote]
+                const lines = ['Layers: ' + st.layers + ' of ' + (st.mode === 'preload' ? 64 : 8) + '   Drawing: ' + (st.mode === 'preload' ? 'pre-loaded' : st.mode) + '   rpm from the car: ' + (v.live ? rpmSrc.describe(Date.now()) : '-') + sweepNote]
                     .concat(st.preloadOff ? wrap('Pre-loaded off (' + st.preloadOff + ')' + (/memory/.test(st.preloadOff) ? ': other apps on the cluster renderer (maps, say) use its memory; turn one off and restart this' : /too many layers/.test(st.preloadOff) ? ': update cluster-render to 0.4.2 or later' : ''), 74) : [])
                     .concat(wrap(groups, 74))
                     .concat(st.refused ? wrap('Refused ' + st.refused + ': ' + st.lastRefused, 74) : []);

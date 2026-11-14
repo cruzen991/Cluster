@@ -227,6 +227,18 @@ class ClusterRender extends EventEmitter {
 
     _send(obj) { this._write(jsonMessage(obj)); }
 
+    /**
+     * Runs fn, its messages leaving in one write: the service reads them in one go, so they go to
+     * the cluster in one flush (a needle and its lit arc in the same frame, never one ahead of the
+     * other) and it wakes once, not once per message.
+     */
+    batch(fn) {
+        const sock = this.sock;
+        if (!sock || !this.connected || typeof sock.cork !== 'function') return fn();
+        sock.cork();
+        try { return fn(); } finally { sock.uncork(); }
+    }
+
     _write(m) {
         if (!this.sock || !this.connected) return;
         if (!this.sock.write(m)) this.blocked = true;
