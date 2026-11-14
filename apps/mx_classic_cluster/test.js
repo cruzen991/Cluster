@@ -487,6 +487,17 @@ const PL = require('./preload');
     assert(liveGlide(g, 6500, 111, true, 8000).ms > 100);
 }
 
+/* a glitched value too long for its readout shows dashes */
+{
+    const { arcTexts } = require('./cluster');
+    const s = { tempUnit: 'f', torqueUnit: 'lbft', units: 'kmh' };
+    const t = arcTexts(s, { speedText: '1024', oilC: 1e6, coolC: -1e6, torqueNm: 1e7, boostPsi: 9999, outsideC: 20, iatC: 30 }, false);
+    assert.strictEqual(t.centre.speed, '---'); assert.strictEqual(t.left.oil, '--'); assert.strictEqual(t.left.cool, '--');
+    assert.strictEqual(t.right.torque, '--'); assert.strictEqual(t.right.boost, '--');
+    const ok = arcTexts(s, { speedText: '250', oilC: 206, coolC: -48, torqueNm: 1023, boostPsi: 36 }, false);
+    assert.deepStrictEqual([ok.centre.speed, ok.left.oil, ok.left.cool, ok.right.torque, ok.right.boost], ['250', '403', '-54', '755', '36'], 'the real extremes still show');
+}
+
 /* the bottom strip test modes: nothing of ours below STRIP_TOP where it is open */
 {
     const A = require('./arc');
@@ -558,6 +569,21 @@ const PL = require('./preload');
     t = 0;
     for (let k = 0; k < MATCHES * 3; k++) { t += 111; r3.feed('cds', 2000 + k * 10, t); r3.feed('bds', (2000 + k * 10) * 4, t + 5); }
     assert.strictEqual(r3.scale, 0.25); assert.strictEqual(r3.using, 'cds', 'as fast: CDS kept');
+    // rates near the line: no flipping back and forth
+    const r4 = new RpmSource(() => {});
+    t = 0; let flips = 0, was = r4.using;
+    let nextB = 0;
+    for (let k = 0; k < 12000; k++) {
+        t += 1;
+        if (t % 110 === 0) r4.feed('cds', 2000 + t, t);                                 // every 110 ms
+        if (t >= nextB) {                                                               // every 70 ms (learned, taken), then 80-96: around the line (0.8 of CDS)
+            r4.feed('bds', (2000 + t) * 4, t);
+            nextB = t + (t < 3000 ? 70 : 80 + (t * 7) % 17);
+        }
+        if (r4.using !== was) { flips++; was = r4.using; }
+    }
+    assert.strictEqual(r4.scale, 0.25);
+    assert(flips <= 1, flips + ' switches between sources');
 }
 
 /* the gear readout: D3, S3 in the sport gate, the number alone while shifting by hand */

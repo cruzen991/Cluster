@@ -7,11 +7,13 @@
  *   bds  BasicDataSet.statusEngineSpeed, raw, its scaling not documented; its rate unknown.
  * Whichever comes more often is the better needle, but only once bds is known to say the same thing:
  * its scale is learned by pairing it with a fresh cds reading (it must agree, at one scale, MATCHES
- * times, and disagree rarely). It is then used while it comes at least FASTER times as often as cds
- * and is not late; otherwise cds. Each new reading of the source in use goes to onReading(rpm, every).
+ * times, and disagree rarely). It is taken once it comes at least 1/FASTER times as often as cds,
+ * and kept until it is no longer clearly faster (KEEP) or is late: two rates near the line do not
+ * flip the needle from one source to the other (if one lags, each flip would step it back).
+ * Each new reading of the source in use goes to onReading(rpm, every).
  */
 const SCALES = [0.25, 0.125, 0.5, 1];
-const MATCHES = 15, AGREE = 0.06, FASTER = 0.8, FRESH_MS = 150;
+const MATCHES = 15, AGREE = 0.06, FASTER = 0.8, KEEP = 0.95, FRESH_MS = 150;
 
 class RpmSource {
     constructor(onReading) {
@@ -55,8 +57,9 @@ class RpmSource {
 
     _choose(now) {
         const c = this.src.cds, b = this.src.bds;
+        const line = this.using === 'bds' ? KEEP : FASTER;
         const bOk = this.scale !== null && b.every > 0 && now - b.at < b.every * 3 &&
-            (!c.every || now - c.at > c.every * 3 || b.every <= c.every * FASTER);
+            (!c.every || now - c.at > c.every * 3 || b.every <= c.every * line);
         this.using = bOk ? 'bds' : 'cds';
     }
 

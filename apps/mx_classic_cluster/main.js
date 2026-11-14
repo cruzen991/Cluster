@@ -72,7 +72,7 @@ mgu.run({
         const gm = new GearMode();
         // the engine speed: from whichever signal comes more often (rpmsource.js); each new reading
         // goes to the needle at once, not at the next tick of the read loop below
-        let rpmSeq = 0, rpmNow = 0, rpmEvery = 111, pushReading = () => {};
+        let rpmSeq = 0, rpmNow = 0, rpmEvery = 111, pushReading = () => {}, liveNow = false;
         const rpmSrc = new RpmSource((rpm, every) => { rpmNow = rpm; rpmEvery = every; rpmSeq++; pushReading(rpm, rpmSeq, every); });
         const seenVals = {};
         const seen = (what, raw) => {
@@ -137,7 +137,9 @@ mgu.run({
             onDisconnected: () => guard.disconnected(),
             onError: (e) => guard.error(e),
         });
-        pushReading = (rpm, seq, every) => cluster.reading(rpm, seq, every);
+        // only while the read loop below shows the car's own data (not the demo drive, not stale data):
+        // otherwise a pushed reading and the tick would steer the needle two ways
+        pushReading = (rpm, seq, every) => { if (liveNow && !car.data().demo) cluster.reading(rpm, seq, every); };
         const apply = () => {
             const on = S().on;
             if (on && !cluster.enabled) guard.want();
@@ -192,6 +194,7 @@ mgu.run({
             const s = S(), d = car.data(), now = Date.now();
             const fresh = lastTick && now - lastTick < STALE_MS;
             const usable = fresh && (!d.demo || s.demo);
+            liveNow = usable && !d.demo;
             const dist = (km) => (km === null ? '---' : commas(Math.round(s.units === 'kmh' ? km : km / 1.609344)));
             const du = s.units === 'kmh' ? 'km' : 'mi';
             const demo = d.demo && s.demo;

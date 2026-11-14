@@ -883,13 +883,15 @@ class ClassicCluster {
  */
 function arcTexts(s, v, sweep) {
     const f = s.tempUnit !== 'c', tu = f ? '°F' : '°C';
-    const T = (c) => (c == null || !isFinite(c) ? '--' : String(Math.round(f ? c * 9 / 5 + 32 : c)));
+    // a value too long for its readout (no real reading is: a glitch) shows dashes, not its first figures
+    const fit = (t, n, dash) => (t.length > n ? dash : t);
+    const T = (c) => (c == null || !isFinite(c) ? '--' : fit(String(Math.round(f ? c * 9 / 5 + 32 : c)), 3, '--'));
     const lb = s.torqueUnit !== 'nm';
-    const tq = v.torqueNm == null || !isFinite(v.torqueNm) ? '--' : String(Math.round((lb ? v.torqueNm * 0.737562 : v.torqueNm) / 5) * 5);   // in fives: steadier, fewer uploads
-    const boost = v.boostPsi == null || !isFinite(v.boostPsi) ? '--' : String(Math.round(Math.max(0, v.boostPsi)));   // whole psi
+    const tq = v.torqueNm == null || !isFinite(v.torqueNm) ? '--' : fit(String(Math.round((lb ? v.torqueNm * 0.737562 : v.torqueNm) / 5) * 5), 4, '--');   // in fives: steadier, fewer uploads
+    const boost = v.boostPsi == null || !isFinite(v.boostPsi) ? '--' : fit(String(Math.round(Math.max(0, v.boostPsi))), 3, '--');   // whole psi
     const up = (x) => String(x == null ? '' : x).toUpperCase();
     return {
-        centre: { gear: sweep ? '88' : (v.gearText || '-'), speed: sweep ? '888' : (v.speedText == null ? '---' : String(v.speedText)), unit: s.units === 'kmh' ? 'KM/H' : 'MPH' },
+        centre: { gear: sweep ? '88' : (v.gearText || '-'), speed: sweep ? '888' : (v.speedText == null ? '---' : fit(String(v.speedText), 3, '---')), unit: s.units === 'kmh' ? 'KM/H' : 'MPH' },
         left: { oil: T(v.oilC), cool: T(v.coolC), tu, oilWarn: v.oilC >= 130, coolWarn: v.coolC >= 112, fuel: v.fuel, range: up(v.rangeText || '---') },
         right: { boost, torque: tq, tq: lb ? 'LB-FT' : 'NM', odo: up(v.odoText || '---'), peak: v.peakPsi >= 1 ? 'PEAK ' + Math.round(v.peakPsi) : '' },
         strip: { outside: T(v.outsideC) === '--' ? '--' : T(v.outsideC) + tu, mode: up(v.modeText) || 'DRIVE', intake: T(v.iatC) === '--' ? '--' : T(v.iatC) + tu },
