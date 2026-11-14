@@ -426,12 +426,15 @@ function drawStrip(p, v) {
 }
 
 /** Gear and speed inside the tach. v: { gear, speed, unit } */
-const CENTRE_GEAR = { x: 0, y: 30, w: 300, h: 150 }, CENTRE_SPEED = { x: 30, y: 184, w: 240, h: 70 };
+/* the centre (0.13.5): the speed large in the middle, its unit under it, the gear under that */
+const CENTRE_SPEED = { x: 0, y: 30, w: 300, h: 150 }, CENTRE_SPEED_BASE = 160;
+const CENTRE_UNIT = { x: 60, y: 166, w: 180, h: 30 }, CENTRE_UNIT_BASE = 188;
+const CENTRE_GEAR = { x: 30, y: 200, w: 240, h: 80 }, CENTRE_GEAR_BASE = 264, CENTRE_GEAR_SIZE = 64;
 function drawCentre(p, v) {
+    tabular(p, 'speed', CENTRE_SPEED, 150, CENTRE_SPEED_BASE, v.speed, 118, WHITE, '');
+    p.cell('unit', CENTRE_UNIT, v.unit, (cv) => cv.text(v.unit, 150, CENTRE_UNIT_BASE, 18, ORANGE, { font: 'orbm', align: 'center', literal: true, spacing: 4 }));
     if (p.gpu && p.gpu.gear) { Object.assign(p.gpu.gear, { text: String(v.gear), col: WHITE, cx: 150 - CENTRE_GEAR.x, unitW: 0 }); }
-    else p.cell('gear', CENTRE_GEAR, v.gear, (cv) => bigText(cv, v.gear, 150, 160, 118, WHITE));
-    tabular(p, 'speed', CENTRE_SPEED, 150, 247, v.speed, 64, WHITE, '');
-    p.cell('unit', { x: 60, y: 258, w: 180, h: 30 }, v.unit, (cv) => cv.text(v.unit, 150, 280, 18, ORANGE, { font: 'orbm', align: 'center', literal: true, spacing: 4 }));
+    else p.cell('gear', CENTRE_GEAR, v.gear, (cv) => bigText(cv, v.gear, 150, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, WHITE));
 }
 
 /**
@@ -462,5 +465,5 @@ module.exports = {
     bigText, needleSprite, gridBackground, graphiteBackground, background, BACKGROUNDS, BG_W, BG_H,
     NOTCH_SCALE, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
-    CENTRE_GEAR, CENTRE_SPEED, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,
+    CENTRE_GEAR, CENTRE_SPEED, CENTRE_SPEED_BASE, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,
 };

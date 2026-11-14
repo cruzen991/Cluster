@@ -194,7 +194,7 @@ const SLOTS = 4;
  */
 const PANEL_BANDS = {
     left: [{ x: 0, y: 0, w: 540, h: 60 }, { x: 0, y: 128, w: 540, h: 40 }, { x: 0, y: 196, w: 540, h: 40 }, { x: 0, y: 308, w: 540, h: 40 }, { x: 0, y: 396, w: 540, h: 96 }],
-    centre: [{ x: 0, y: 250, w: 300, h: 40 }],
+    centre: [{ x: 0, y: 160, w: 300, h: 40 }],
 };
 PANEL_BANDS.right = PANEL_BANDS.left;
 

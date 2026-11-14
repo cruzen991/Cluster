@@ -367,8 +367,8 @@ class ClassicCluster {
     /** The readouts' glyph atlases (the same for every setting). */
     preAtlases(art) {
         if (art.atlases) return;
-        art.atlases = { figs96: PL.atlas('tabular', 96, A.ROW.v1.h, A.ROW.b1 - A.ROW.v1.y), figs64: PL.atlas('tabular', 64, A.CENTRE_SPEED.h, 247 - A.CENTRE_SPEED.y),
-            gear: PL.atlas('gear', 118, A.CENTRE_GEAR.h, 160 - A.CENTRE_GEAR.y) };
+        art.atlases = { figs96: PL.atlas('tabular', 96, A.ROW.v1.h, A.ROW.b1 - A.ROW.v1.y), figs118: PL.atlas('tabular', 118, A.CENTRE_SPEED.h, A.CENTRE_SPEED_BASE - A.CENTRE_SPEED.y),
+            gear: PL.atlas('gear', A.CENTRE_GEAR_SIZE, A.CENTRE_GEAR.h, A.CENTRE_GEAR_BASE - A.CENTRE_GEAR.y) };
     }
 
     /**
@@ -429,7 +429,7 @@ class ClassicCluster {
         });
         this.assetRefs = assets;
         const FIELDS = { left: { oil: ['figs96', A.ROW.v1], cool: ['figs96', A.ROW.v2] }, right: { boost: ['figs96', A.ROW.v1], torque: ['figs96', A.ROW.v2] },
-            centre: { gear: ['gear', A.CENTRE_GEAR], speed: ['figs64', A.CENTRE_SPEED] }, strip: {} };
+            centre: { speed: ['figs118', A.CENTRE_SPEED], gear: ['gear', A.CENTRE_GEAR] }, strip: {} };
         this.panels = {};
         for (const key of ['centre', 'left', 'right', 'strip']) {
             const Lk = L[key], z = key === 'centre' ? 31 : 1, kk = Lk.iw ? Lk.w / Lk.iw : 1;

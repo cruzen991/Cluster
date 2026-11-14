@@ -438,7 +438,7 @@ const PL = require('./preload');
     assert.deepStrictEqual(PL.readoutUniforms(at, '--', 100, 0).g.slice(0, 2), [10, 10]);
     assert.deepStrictEqual(PL.readoutUniforms(at, '', 100, 0).g, [-1, -1, -1, -1]);
     assert.strictEqual(PL.readoutUniforms(at, '12345', 100, 0).g.filter((g) => g >= 0).length, 4, 'four slots at most');
-    const ag = PL.atlas('gear', 118, A.CENTRE_GEAR.h, 130);
+    const ag = PL.atlas('gear', A.CENTRE_GEAR_SIZE, A.CENTRE_GEAR.h, A.CENTRE_GEAR_BASE - A.CENTRE_GEAR.y);
     assert(ag.cv.w <= 2048 && 'PRND'.split('').every((c) => ag.adv[c] > 0));
     const d3 = PL.readoutUniforms(ag, 'D3', 150, 0);
     assert(d3.x[1] - d3.x[0] === Math.round(ag.adv.D) && d3.g[0] === ag.glyphs.indexOf('D'));
