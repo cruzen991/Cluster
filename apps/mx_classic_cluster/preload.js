@@ -184,7 +184,7 @@ function numeralScale(rpm, n) {
 /* ---------- readouts: glyph atlases and the shader that draws from them ---------- */
 
 const FIGS = '0123456789-';
-const GEAR_GLYPHS = 'PRND0123456789-';
+const GEAR_GLYPHS = 'PRNDS0123456789-';
 const SLOTS = 4;
 
 /**

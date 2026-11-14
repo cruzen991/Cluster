@@ -480,6 +480,35 @@ const PL = require('./preload');
     assert.strictEqual(aimRpm({}, 3000, false), 3000);
 }
 
+/* the gear readout: D3, S3 in the sport gate, the number alone while shifting by hand */
+{
+    const { GearMode, TEMP_MANUAL_MS } = require('./gearmode');
+    let g = new GearMode();
+    assert.strictEqual(g.text(3, 0), 'D3', 'drive');
+    // from the lever and the paddles (no gearbox data)
+    g.onLever('M_S', 0); assert.strictEqual(g.text(3, 0), 'S3', 'lever left: S');
+    g.onLever(5, 100); assert.strictEqual(g.text(4, 200), '4', 'a tap in the S gate: manual');
+    assert.strictEqual(g.text(4, 100 + TEMP_MANUAL_MS * 5), '4', 'manual in the S gate does not time out');
+    g.onPaddle('LANGZUG_PLUS', 1e6); assert.strictEqual(g.text(4, 1e6), 'S4', '+ held: back to S');
+    g.onPaddle(6, 2e6); assert.strictEqual(g.text(5, 2e6), '5', 'a paddle tap in S: manual');
+    g.onLever('D', 2e6 + 10); assert.strictEqual(g.text(5, 2e6 + 20), 'D5', 'lever back to D: drive');
+    g.onPaddle(5, 3e6); assert.strictEqual(g.text(4, 3e6 + 100), '4', 'a paddle tap in D: manual for a while');
+    assert.strictEqual(g.text(4, 3e6 + TEMP_MANUAL_MS + 1), 'D4', 'which ends by itself');
+    g.onLever('M_S', 4e6); g.onPaddle(1, 4e6); g.onStage('P'); assert.strictEqual(g.text(1, 4e6), 'D1', 'P ends the gate and manual');
+    g.onPaddle(0, 5e6); g.onPaddle(15, 5e6); g.onLever(14, 5e6); assert.strictEqual(g.text(2, 5e6), 'D2', 'no-press values change nothing');
+    // the gearbox's own data wins and is exact
+    g = new GearMode();
+    g.onLever('M_S', 0);
+    g.onProgram('S_MINUS_PROGRAMM'); assert.strictEqual(g.text(3, 0), 'S3');
+    g.onProgram(2); assert.strictEqual(g.text(3, 0), '3', 'M programme: the number alone');
+    g.onPaddle(8, 1); assert.strictEqual(g.text(3, 1), '3', 'the gearbox, not the paddles, decides once it answers');
+    g.onProgram('DUNKELSCHALTUNG'); assert.strictEqual(g.text(3, 2), 'D3');
+    g.onProgram(7); assert.strictEqual(g.text(3, 3), 'D3', 'an invalid value changes nothing');
+    assert.strictEqual(g.source, 'gearbox');
+    // the GPU's gear atlas has the S
+    assert(require('./preload').GEAR_GLYPHS.indexOf('S') >= 0);
+}
+
 /* the cluster pre-loaded, with a stand-in client: what it sends at start and while driving */
 function preloadDrive(done) {
     const C = require('./cluster');

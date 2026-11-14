@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
-  "version": "0.13.5",
+  "version": "0.13.6",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -21,7 +21,8 @@
     "de.bmw.infotainment.drivingexcitement.FES": {
       "statusFESVehicleDynamicSwitchHMI": "rs",
       "statusSwitchDriveDynamicSport2": "rs",
-      "statusActualValueTorque2": "rs"
+      "statusActualValueTorque2": "rs",
+      "operationPaddleSwitch": "s"
     },
     "de.bmw.infotainment.KombiIF": {
       "statusRangeTankStatus": "rs"
@@ -39,6 +40,14 @@
       "_broadcasts": [
         "sendTasuResponse"
       ]
+    },
+    "de.bmw.infotainment.misc.MDrive": {
+      "_optional": "the gear readout's S / manual from the gearbox (else the lever and paddles)",
+      "dataDisplayGearbox": "s"
+    },
+    "de.bmw.infrastructure.analytics.BasicDataSet": {
+      "_optional": "the gear readout's S gate and manual from the lever",
+      "basicDataSet": "s"
     }
   },
   "screens": [

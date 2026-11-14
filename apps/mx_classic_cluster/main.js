@@ -26,10 +26,13 @@ const START_DELAY_MS = 1500;       // the cluster starts this long after the app
 const TOGGLE_MS = 1000;            // presses of on / off closer than this are one press
 const KOMBI = 'de.bmw.infotainment.KombiIF';
 const FES = 'de.bmw.infotainment.drivingexcitement.FES';
+const MDRIVE = 'de.bmw.infotainment.misc.MDrive';
+const BASIC = 'de.bmw.infrastructure.analytics.BasicDataSet';
 const ENV = 'de.bmw.infrastructure.EnvironmentalInformation';
 const IAT_MS = 2000;               // intake air temperature: one read from the engine unit every 2 s (arc style only)
 const IAT_STALE_MS = 15000;        // and shown as -- when the last good one is older than this
 const { modeOf, boostPsiOf } = require('./modes');
+const { GearMode } = require('./gearmode');
 
 mgu.run({
     async start(ctx) {
@@ -64,6 +67,13 @@ mgu.run({
         let boostBar = null, boostAt = 0;
         // outside temperature (raw x 0.5 - 40 deg C, 255 = none; the kit apps' scaling), for the arc style
         let outsideC = null, outsideAt = 0;
+        const gm = new GearMode();
+        const seenVals = {};
+        const seen = (what, raw) => {
+            const k = what + ':' + JSON.stringify(raw);
+            if (seenVals[k] || Object.keys(seenVals).length > 40) return;
+            seenVals[k] = true; log.info(what + ' ' + JSON.stringify(raw));
+        };
         const car = new Car(ctx, ['rpm', 'speed', 'temps', 'gear', 'torque'], {
             [ENV]: { ExteriorTemperature: (v) => {
                 const r = v && v.temperatureExterior;
@@ -76,7 +86,12 @@ mgu.run({
                 if (typeof r === 'number' && r >= 0 && r < 4095) rangeKm = r;
                 if (typeof o === 'number' && o >= 0 && o < 16777215) odoKm = o;
             } },
+            // the gear readout's D / S / manual (gearmode.js): the gearbox's own display data, else the
+            // lever and the paddles; each first value logged, to see what this car sends
+            [MDRIVE]: { dataDisplayGearbox: (v) => { const r = v && v.displayProgramGearbox; seen('gearbox program', r); gm.onProgram(r); } },
+            [BASIC]: { basicDataSet: (v) => { const r = v && v.operationGearSelectorSwitch; if (r === undefined) return; seen('lever', r); gm.onLever(r, Date.now()); } },
             [FES]: {
+                operationPaddleSwitch: (v) => { const r = v && v.operationPaddleSwitch; seen('paddle', r); gm.onPaddle(r, Date.now()); },
                 statusFESVehicleDynamicSwitchHMI: (v) => {
                     const raw = v && v.actualValueModeDrivingExperience, m = modeOf(raw);
                     if (m !== modeText && m !== null) log.info('drive mode ' + JSON.stringify(raw) + ' -> ' + m);
@@ -183,7 +198,7 @@ mgu.run({
             return {
                 speed, rpm: d.rpm || 0, rpmSeq: d.demo ? null : rpmSeq, rpmEvery, fuel, oil: oilDial, oilC, boostPsi, boost: boostPsi === null ? null : boostPsi / F.BOOST_MAX,
                 coolC: typeof d.coolant === 'number' ? d.coolant : null, torqueNm: typeof d.torque === 'number' ? d.torque : null,
-                speedText: String(Math.round(speed)), gearText: gearText(d), live: !d.demo,
+                speedText: String(Math.round(speed)), gearText: gearText(d, gm), live: !d.demo,
                 rangeText: info.rangeText, odoText: info.odoText, modeText: info.modeText, outsideC: info.outsideC, iatC: info.iatC,
             };
         };
@@ -249,11 +264,13 @@ function wrap(s, n) {
     if (line) out.push(line);
     return out;
 }
-function gearText(d) {
+function gearText(d, gm) {
+    if (gm) gm.onStage(d.stage);
     if (d.stage === 'P') return 'P';
     if (d.stage === 'R' || d.gear === -1) return 'R';
     if (d.stage === 'N') return 'N';
-    if (typeof d.gear === 'number' && d.gear > 0) return (d.stage === 'D' ? 'D' : '') + d.gear;
+    // in drive: D3, S3 in the sport gate, 3 alone while shifting by hand (gearmode.js)
+    if (typeof d.gear === 'number' && d.gear > 0) return d.stage === 'D' ? (gm ? gm.text(d.gear, Date.now()) : 'D' + d.gear) : String(d.gear);
     if (d.stage === 'D') return 'D';
     return d.gear === 0 ? 'N' : '-';
 }

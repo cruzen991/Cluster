@@ -127,6 +127,7 @@ The app's own loop catches its errors, but a freeze is not something it can see 
 | Boost, 0-21 psi (small gauge, left of the tach's bottom) | `FES.statusSwitchDriveDynamicSport2` (`displayBoostPressure`), raw x 0.01 bar as the idrive7-apps Live Data app reads it (its scaling marked "scale?" there); setting *Boost signal*: gauge (default) or absolute (subtracts 14.7 psi). If it reads about 14 psi at idle, the signal is absolute: switch the setting |
 | Fuel, 0-1/1 | `KombiIF.statusRangeTankStatus` (litres) over the tank size setting |
 | Gear LCD: P, R, N, D1-D8 | `VehicleInformation.statusGearboxDrive` / `DataPowerTrain2` |
+| Gear: S3 in the sport gate, the number alone in manual | `MDrive.dataDisplayGearbox` (the gearbox's own display data) if the car has it, else the lever (`BasicDataSet.operationGearSelectorSwitch`) and the paddles (`FES.operationPaddleSwitch`); manual entered from D by a paddle is taken to end 8 s after the last tap |
 | Drive mode (centre panel, text) | `FES.statusFESVehicleDynamicSwitchHMI` (`actualValueModeDrivingExperience`), decoded with the idrive7-apps Live Data app's table; *DRIVE MODE ---* until the car sends one |
 | Range and odometer (centre panel) | `KombiIF.statusRangeTankStatus` |
 | Coolant (Arc) | `CDS.statusEngineTemperature` |
