@@ -511,11 +511,12 @@ function preloadDrive(done) {
         assert(sent.filter((m) => m.op === 'bind').length === 6, 'six readouts bound to atlases');
         let t = Date.now(), seq = 0;
         let n0 = 0;
+        // each 50 ms: a new rpm (a tick), and the motion loop at 60 a second in between
         const feed = (rpm, boost) => {
-            t += 50;
             cl.update({ speed: 50, rpm, fuel: 0.5, oil: 0.5, oilC: 95, coolC: 90, boost: 0.5, boostPsi: boost, torqueNm: 200 + rpm / 20, iatC: 30, outsideC: 15,
                 speedText: String(Math.round(rpm / 100)), gearText: 'D3', rangeText: '200 mi', odoText: '1 mi', modeText: 'Sport', live: true, rpmSeq: ++seq, rpmEvery: 50 });
             cl.tick(50, t);
+            for (let k = 0; k < 3; k++) { t += 50 / 3; cl.motion(t); }
         };
         for (let i = 0; i < 10; i++) feed(1500, 0);             // the first readouts (whole panels) go out here
         n0 = sent.length;
@@ -527,32 +528,43 @@ function preloadDrive(done) {
         const bytes = px.reduce((a, m) => a + m.bytes, 0);
         if (process.env.DBG) { const by = {}; px.forEach((m) => { const k = Object.keys(cl.refs).find((x) => cl.refs[x] === m.ref); by[k] = (by[k] || 0) + m.bytes; }); console.log(by); }
         assert(bytes < 120000, 'a 6 s pull to the redline and back sends ' + bytes + ' bytes of pixels (the peak and units moving only)');
-        assert(drive.some((m) => m.op === 'animate' || (m.o && m.o.op === 'animate')), 'animations sent');
+        // never a renderer animation: cluster-render 0.5.2+ rebuilds all of a scene's animations each
+        // time one is replaced (RAMSES 19); everything moves by plain sets
+        const isAnim = (m) => m.op === 'animate' || (m.o && m.o.op === 'animate');
+        assert.strictEqual(sent.filter(isAnim).length, 0, 'no renderer animations at all');
         assert(drive.some((m) => m.op === 'uniform' && m.name === 'u_g'), 'readouts change by uniforms');
         const covers = Object.keys(cl.refs).filter((k) => /^cover\d/.test(k)).map((k) => cl.refs[k]);
-        const coverAnims = drive.filter((m) => covers.includes(m.ref) && (m.op === 'animate' || (m.o && m.o.op === 'animate')));
-        assert(coverAnims.length >= covers.length, 'every cover turned on the way up');
+        const topAng = Math.max(...drive.filter((m) => m.op === 'set' && m.ref === cl.refs.needle).map((m) => m.o.rotate));
+        Object.keys(cl.refs).filter((k) => /^cover\d/.test(k)).forEach((k) => {
+            if (PL.PIECES[Number(k.slice(5))].s >= topAng) return;               // a piece the needle never reached
+            assert(sent.some((m) => m.op === 'set' && m.ref === cl.refs[k] && m.o.rotate !== undefined), k + ' turned');
+        });
         const fl = drive.filter((m) => m.op === 'set' && m.ref === cl.refs.flash);
         assert(fl.length >= 2, 'the flash at the redline');
-        // live glides start where the needle is (not where the last one was headed) and outlast the
-        // time between rpms, so the needle never stops between them
-        const nAn = drive.filter((m) => m.ref === cl.refs.needle && (m.op === 'animate' || (m.o && m.o.op === 'animate')) && (m.o.property === 'rotate'));
-        const durs = nAn.map((m) => Number(String(m.o.keys).split(' ').pop().split(':')[0]));
-        assert(durs.length > 20 && durs.every((ms) => ms >= 57), 'glides outlast the 50 ms between rpms: ' + durs.slice(0, 5));
-        // the sweep: ONE animation each for the needle, the covers and the numerals, nothing per tick
+        // the needle: a set on (nearly) every motion step while it moves, each a small step (no jumps)
+        const nd = drive.filter((m) => m.op === 'set' && m.ref === cl.refs.needle).map((m) => m.o.rotate);
+        assert(nd.length > 200, 'the needle set ' + nd.length + ' times');
+        const steps = nd.slice(1).map((x, i) => Math.abs(x - nd[i]));
+        assert(Math.max(...steps) < 15, 'no jump: largest step ' + Math.max(...steps).toFixed(2) + ' deg');
+        // the lit arc's edge stays under the needle: each cover's turn is the needle's, clamped
+        const lastNeedle = nd[nd.length - 1];
+        Object.keys(cl.refs).filter((k) => /^cover\d/.test(k)).forEach((k) => {
+            const i = Number(k.slice(5)), sets = sent.filter((m) => m.op === 'set' && m.ref === cl.refs[k] && m.o.rotate !== undefined);
+            const want = PL.coverTurn(i, lastNeedle), got = sets.length ? sets[sets.length - 1].o.rotate : 0;
+            assert(Math.abs(want - got) < 0.2, k + ': ' + got + ' for the needle at ' + lastNeedle + ' (want ' + want + ')');
+        });
+        // the sweep: the needle along its curve, up to full scale and back, by sets
         const n5 = sent.length;
         cl.values.live = false; cl.values.speed = 0;
         assert.strictEqual(cl.startSweep(false), '');
         cl.sweep.t0 = t;                                                         // on this test's clock
-        for (let k = 0; k < 90; k++) { t += 33; cl.tick(33, t); }               // ~3 s of ticks
-        const sw = sent.slice(n5).filter((m) => m.op === 'animate' || (m.o && m.o.op === 'animate'));
-        const needleSw = sw.filter((m) => m.ref === cl.refs.needle);
-        assert.strictEqual(needleSw.length, 1, 'the sweep is one needle animation, not ' + needleSw.length);
-        const keys = String(needleSw[0].o.keys).split(' ').map((k) => k.split(':').map(Number));
-        assert(keys.length > 50 && keys.length <= 256, keys.length + ' keys');
-        assert.strictEqual(keys[0][1], F.A0); assert.strictEqual(keys[keys.length - 1][1], F.A0);
-        assert(Math.abs(Math.max(...keys.map((k) => k[1])) - F.A1) < 0.01, 'to full scale');
-        covers.forEach((ref) => assert(sw.filter((m) => m.ref === ref).length === 1, 'each cover one animation'));
+        for (let k = 0; k < 180; k++) { t += 1000 / 60; if (k % 2 === 0) cl.tick(33, t); cl.motion(t); }   // 3 s
+        const sw = sent.slice(n5).filter((m) => m.op === 'set' && m.ref === cl.refs.needle).map((m) => m.o.rotate);
+        assert(sw.length > 100, 'the sweep moves the needle (' + sw.length + ' sets)');
+        assert(Math.abs(Math.max(...sw) - F.A1) < 0.5, 'to full scale: ' + Math.max(...sw));
+        assert(Math.abs(sw[sw.length - 1] - F.A0) < 0.5, 'and back to rest: ' + sw[sw.length - 1]);
+        assert(!cl.sweep, 'the sweep over');
+        assert.strictEqual(sent.filter(isAnim).length, 0, 'still no renderer animations');
         // a refusal (an older cluster-render) turns the pre-loaded mode off and rebuilds
         cl.preloadFailed(fake, 'layer refused: too many layers');
         setTimeout(() => {

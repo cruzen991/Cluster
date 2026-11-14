@@ -215,7 +215,9 @@ function atlas(kind, size, h, base) {
         [...glyphs].forEach((ch) => { adv[ch] = A.bigText(tmp, ch, -1000, base, size, '#ffffff'); });
         cw = Math.ceil(Math.max(...Object.values(adv))) + 4;
     } else cw = A.figW(probe, size);
-    const cv = new Canvas(cw * glyphs.length, h).clear([0, 0, 0, 0]);
+    // the width a multiple of 8: a GPU reads an r8 texture's rows on 4-byte (or 8) boundaries unless told
+    // otherwise, so any other width shears every row (0.13.0-0.13.3: the figures garbled on the car)
+    const cv = new Canvas(Math.ceil(cw * glyphs.length / 8) * 8, h).clear([0, 0, 0, 0]);
     [...glyphs].forEach((ch, i) => {
         if (kind === 'gear') A.bigText(cv, ch, i * cw + adv[ch] / 2, base, size, '#ffffff');
         else { cv.text(ch, i * cw + cw / 2, base, size, '#ffffff', { font: 'orb', align: 'center', literal: true }); adv[ch] = cw; }

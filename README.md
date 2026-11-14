@@ -237,7 +237,20 @@ figures between them), the glyph atlases are one byte a pixel (r8, as cluster-re
 lit arc's pieces are shorter (smaller rectangles). If the
 renderer still runs out (other apps on it), the app goes back to the rotating layer (11 MB) and its screen says so.
 
-**Smooth motion (0.13.3):** the needle sweep is sent as one animation (the needle, the lit arc's covers and the
+**0.13.4 fixes (found on the car):**
+
+- *Garbled figures:* the glyph atlases are one byte a pixel, and their widths (891, 594, 1545) were not
+  multiples of 4. A GPU reads texture rows on 4-byte boundaries unless told otherwise, so every row was read
+  shifted and the figures came out sheared. The atlases are now padded to multiples of 8; checked on WebGL with
+  the GPU's default alignment, the figures are exact.
+- *The sweep doing nothing, and lag:* cluster-render 0.5.2 and later, on iDrive 7's RAMSES 19, rebuild every
+  animation in the scene each time an app replaces one. The cluster replaced its needle's (and the covers' and
+  numerals') animation on every rpm from the car, so the renderer was rebuilding about 20 animations dozens of
+  times a second. 0.13.4 sends no renderer animations at all: the app works out where the needle, the covers and
+  the numerals are 60 times a second and sends plain sets, which cluster-render applies each of its ticks
+  (30 a second). The sweep runs the same way.
+
+**Smooth motion (0.13.3, superseded by 0.13.4's sets):** the needle sweep is sent as one animation (the needle, the lit arc's covers and the
 numerals), which the renderer plays by itself; before, it was a chain of 100 ms glides started by the app's
 ticks, and the needle stopped for up to a tick (or longer, when the head unit was busy) between them, about 8
 times a second. While driving, each glide now starts where the needle is and lasts a little longer than the
