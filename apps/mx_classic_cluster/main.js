@@ -54,6 +54,7 @@ mgu.run({
             style: settings.get('style') === 'arc' ? 'arc' : 'tech',     // 'sport' / 'classic' saved by an older version: tech
             torqueUnit: settings.get('torqueUnit') === 'nm' ? 'nm' : 'lbft',
             needleResponse: settings.get('needleResponse') === 'quick' ? 'quick' : 'smooth',
+            bottomStrip: ['open', 'gear', 'nogear'].indexOf(settings.get('bottomStrip')) >= 0 ? settings.get('bottomStrip') : 'covered',
             notch: settings.get('notch') !== false,
             arcBg: ['graphite', 'dusk', 'twin'].indexOf(settings.get('arcBg')) >= 0 ? settings.get('arcBg') : 'grid',
             shift: settings.get('shift') !== false,

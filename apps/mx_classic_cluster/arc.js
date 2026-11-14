@@ -51,8 +51,26 @@ const ORANGE = [255, 122, 26], WHITE = '#f5f6f8', DIM = '#7a8088', FAINT = '#343
  * clears the camera with the ticks and keeps the bottom clear of the strip.
  */
 const NOTCH_SCALE = 1.04, NOTCH_CY = 466;  // 0.12.1: from the car's photo, the camera ends about y 147; the ticks now start at 154
-function arcLayout(dy, notch) {
-    const y = dy || 0, k = notch ? NOTCH_SCALE : 1, cy = y + (notch ? NOTCH_CY : DCY);
+/*
+ * The bottom strip left open (setting bottomStrip, a test): other projects found that with the car's own
+ * bottom bar uncovered the KOMBI leaves out its black boxes (Cluster Layouts, thatgrayg22; bimmer-lab
+ * issue 5). Nothing of ours below STRIP_TOP where it is open (658: 660 clipped the tops of the drive mode
+ * and gear letters there, Cluster Layouts' photos); GEAR_WINDOW is where the bar shows the drive mode and
+ * gear. With the camera notch the tach is then OPEN_SCALE (a multiple of 1/25, as NOTCH_SCALE, so the
+ * pre-loaded pieces land on whole pixels), its top ticks at y ~151 (the camera ends at ~147) and its
+ * picture's rectangle, not only what it paints, ending at STRIP_TOP.
+ */
+const STRIP_TOP = 658, GEAR_WINDOW = [1196, 1424], OPEN_SCALE = 0.96, OPEN_CY = 439;
+const stripOpen = (mode) => mode === 'open' || mode === 'gear' || mode === 'nogear';
+/** The parts of the band y STRIP_TOP-720 we keep covered (black) for a bottomStrip mode: [x0, x1] each. */
+function stripCovers(mode) {
+    if (mode === 'gear') return [[0, GEAR_WINDOW[0]], [GEAR_WINDOW[1], 1920]];
+    if (mode === 'nogear') return [GEAR_WINDOW];
+    return [];
+}
+function arcLayout(dy, notch, strip) {
+    const open = notch && stripOpen(strip);
+    const y = dy || 0, k = open ? OPEN_SCALE : notch ? NOTCH_SCALE : 1, cy = y + (open ? OPEN_CY : notch ? NOTCH_CY : DCY);
     const sized = (w, h, px, py) => Object.assign({ x: Math.round(960 - px * k), y: Math.round(cy - py * k), w: Math.round(w * k), h: Math.round(h * k) },
         k !== 1 ? { iw: w, ih: h, sampling: 'bilinear' } : {});
     return {
@@ -463,7 +481,7 @@ function bigText(cv, str, x, y, size, col) {
 
 module.exports = {
     bigText, needleSprite, gridBackground, graphiteBackground, background, BACKGROUNDS, BG_W, BG_H,
-    NOTCH_SCALE, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
+    NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, stripOpen, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
     CENTRE_GEAR, CENTRE_SPEED, CENTRE_SPEED_BASE, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,
 };

@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -330,6 +330,30 @@
         [
           "quick",
           "Quick (aims one reading ahead)"
+        ]
+      ]
+    },
+    {
+      "key": "bottomStrip",
+      "label": "Bottom strip (test; Arc style)",
+      "type": "choice",
+      "default": "covered",
+      "options": [
+        [
+          "covered",
+          "Covered (default)"
+        ],
+        [
+          "open",
+          "Open: the car's own bar shows"
+        ],
+        [
+          "gear",
+          "Open over the car's gear and drive mode only"
+        ],
+        [
+          "nogear",
+          "Open except over the gear and drive mode"
         ]
       ]
     },

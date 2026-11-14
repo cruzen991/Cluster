@@ -487,6 +487,23 @@ const PL = require('./preload');
     assert(liveGlide(g, 6500, 111, true, 8000).ms > 100);
 }
 
+/* the bottom strip test modes: nothing of ours below STRIP_TOP where it is open */
+{
+    const A = require('./arc');
+    const now = A.arcLayout(0, true), open = A.arcLayout(0, true, 'gear');
+    const tick = (L) => L.dial.y + ((154 - now.dial.y) / now.scale) * L.scale;           // the top tick's row
+    assert(Math.abs(tick(open) - 154) <= 6 && tick(open) >= 147, 'the top ticks stay clear of the camera: ' + tick(open));
+    assert(open.dial.y + Math.round(A.DH * open.scale) <= A.STRIP_TOP, 'the tach ends above the strip: ' + (open.dial.y + A.DH * open.scale));
+    assert(Number.isInteger(25 * open.scale), 'pieces on whole pixels');
+    for (const k of ['left', 'right', 'centre']) assert(open[k].y + open[k].h <= A.STRIP_TOP, k + ' above the strip');
+    assert.deepStrictEqual(A.stripCovers('covered'), []);
+    assert.deepStrictEqual(A.stripCovers('gear'), [[0, A.GEAR_WINDOW[0]], [A.GEAR_WINDOW[1], 1920]]);
+    assert.deepStrictEqual(A.stripCovers('nogear'), [A.GEAR_WINDOW]);
+    assert.deepStrictEqual(A.arcLayout(0, true, 'covered'), now, 'covered: the layout as before');
+    assert.deepStrictEqual(A.arcLayout(0, false, 'open'), A.arcLayout(0, false), 'no camera: the tach already ends above the strip');
+    assert(A.arcLayout(0, false).dial.y + A.DH <= A.STRIP_TOP);
+}
+
 /* the renderer client: a batch's messages leave in one write */
 {
     const CR = require('./cluster_render_client');

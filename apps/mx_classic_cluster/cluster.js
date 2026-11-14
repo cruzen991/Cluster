@@ -221,7 +221,7 @@ class ClassicCluster {
      */
     build() {
         const s = this.getSettings();
-        const key = JSON.stringify([s.shift, s.style, s.arcBg, s.notch, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake, !!this.preloadOff]);
+        const key = JSON.stringify([s.shift, s.style, s.arcBg, s.notch, s.bottomStrip, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake, !!this.preloadOff]);
         if (!this.cr || key === this.faceKey) return;
         this.faceKey = key;
         const gen = this.buildGen = (this.buildGen || 0) + 1, cr = this.cr;
@@ -292,7 +292,8 @@ class ClassicCluster {
 
     /** The arc style's layers (see arc.js). */
     _arcLayers(s, o, art, t0) {
-        const cr = this.cr, L = A.arcLayout(s.dy, s.notch);
+        const cr = this.cr, L = A.arcLayout(s.dy, s.notch, s.bottomStrip);
+        const open = A.stripOpen(s.bottomStrip);
         Object.keys(this.refs).forEach((k) => cr.drop(this.refs[k]));
         // the glyph atlases never change: kept for a pre-loaded rebuild on this connection, dropped otherwise
         const willPreload = s.needles === 'preload' && !this.preloadOff;
@@ -303,8 +304,20 @@ class ClassicCluster {
         this.arc = true;
         // the stock cluster is always hidden in this style: the readouts cover the whole panel. The
         // background is the horizon grid, drawn at half size and stretched (bilinear) by the renderer
-        R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: A.BG_W, ih: A.BG_H, sampling: 'bilinear' });
-        cr.pixels(R.back, null, buf(art.bg));
+        if (!open) {
+            R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: A.BG_W, ih: A.BG_H, sampling: 'bilinear' });
+            cr.pixels(R.back, null, buf(art.bg));
+        } else {
+            // the bottom strip open (a test, A.stripOpen): the background ends at STRIP_TOP, its own top part
+            // (not squeezed), and black covers whatever of the strip this mode keeps covered
+            const bh = Math.floor(A.BG_H * A.STRIP_TOP / H);
+            R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: Math.round(bh * H / A.BG_H), iw: A.BG_W, ih: bh, sampling: 'bilinear' });
+            cr.pixels(R.back, null, crop(art.bg, { x: 0, y: 0, w: A.BG_W, h: bh }));
+            A.stripCovers(s.bottomStrip).forEach(([x0, x1], i) => {
+                const ref = R['stripCover' + i] = img({ klass: 'ambient', x: x0, y: A.STRIP_TOP, w: x1 - x0, h: H - A.STRIP_TOP, iw: 4, ih: 4 });
+                cr.pixels(ref, null, blackPx(4, 4));
+            });
+        }
 
         this.mode = s.needles === 'shader' ? 'shader' : s.needles === 'redraw' ? 'redraw' : s.needles === 'preload' && !this.preloadOff ? 'preload' : 'rotate';
         if (this.mode === 'preload') return this._preLayers(s, o, art, t0, L, base, img, R);
@@ -345,7 +358,7 @@ class ClassicCluster {
 
         this.panels = {};
         for (const k of ['centre', 'left', 'right', 'strip']) {
-            R[k] = img(Object.assign({ z: k === 'centre' ? 3 : 1 }, L[k]));
+            R[k] = img(Object.assign({ z: k === 'centre' ? 3 : 1 }, L[k], k === 'strip' && open ? { visible: false } : {}));
             this.panels[k] = { ref: R[k], p: new A.Panel(L[k].iw || L[k].w, L[k].ih || L[k].h) };
         }
         this.panelAt = 0; this.slow = null;
@@ -445,7 +458,7 @@ class ClassicCluster {
                 R[key + '#' + i] = img(Object.assign({ z, x: Lk.x + Math.round(b.x * kk), y: Lk.y + Math.round(b.y * kk), w: Math.round(b.w * kk), h: Math.round(b.h * kk) },
                     kk !== 1 ? { iw: b.w, ih: b.h, sampling: 'bilinear' } : {}));
             });
-            else R[key] = img(Object.assign({ z }, Lk));
+            else R[key] = img(Object.assign({ z }, Lk, key === 'strip' && A.stripOpen(s.bottomStrip) ? { visible: false } : {}));
             const p = new A.Panel(Lk.iw || Lk.w, Lk.ih || Lk.h);
             p.gpu = {};
             Object.keys(FIELDS[key]).forEach((f) => {
@@ -898,6 +911,8 @@ const later = (fn) => setTimeout(fn, 0);
 
 /** The pixels of rectangle q of a canvas, row by row. */
 function crop(cv, q) { return cropMany(cv, [q]); }
+/** w x h opaque black pixels (RGBA). */
+function blackPx(w, h) { const b = Buffer.alloc(w * h * 4, 0); for (let i = 3; i < b.length; i += 4) b[i] = 255; return b; }
 /**
  * The rpm a needle glide heads for, on each new rpm from the car. 'smooth': the rpm itself (the
  * needle shows each one a reading late: glides take the time between readings). 'quick': one

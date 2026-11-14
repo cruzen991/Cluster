@@ -258,6 +258,15 @@ times a second. While driving, each glide now starts where the needle is and las
 time between rpms (x1.15), so the needle never stops waiting for the next one. Measured on the desk: the sweep
 went from 9-15 stops to none (only the planned hold at the top); driving from about 20 stops in 5 s to none.
 
+**Bottom strip test (0.14.1; Settings > Bottom strip, Arc style):** other projects found that a layout leaving
+the car's own bottom bar uncovered makes the cluster stop drawing its black boxes (the gear box right of centre,
+and an M car's two): Cluster Layouts (found and tested by thatgrayg22) and bimmer-lab issue 5 (concpriv: "definitely
+resolves the gearbox black box"). Why is not known, so this setting finds out how little needs to be open:
+*Covered* (the default, as before); *Open* (the car's bar shows); *Open over the car's gear and drive mode only*
+(x 1196-1424); *Open except over the gear and drive mode*. In the open modes nothing of ours reaches below y 658
+(not even an empty rectangle), black covers what the mode keeps covered, our own bottom row (outside temperature,
+drive mode, intake) is hidden, and with the camera notch the tach is 96% of its size so it ends above the strip.
+
 **Faster and steadier (0.14.0):**
 - *Each frame in one write.* The needle, the lit arc, the numerals and the shift lights for a frame now go to
   cluster-render as one write, so it flushes them together: the arc can no longer trail the needle by a frame, and
