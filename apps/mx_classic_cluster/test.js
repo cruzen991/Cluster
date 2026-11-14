@@ -478,6 +478,13 @@ const PL = require('./preload');
     assert.strictEqual(aimRpm(d, 4450, true), 4450, 'the turn after it: none');
     assert.strictEqual(aimRpm(d, 4500, true), 4550, 'steady again');
     assert.strictEqual(aimRpm({}, 3000, false), 3000);
+    // a shift is shown at once; a pull glides over the time between readings
+    const { liveGlide, JUMP_MS } = require('./cluster');
+    const g = {}; liveGlide(g, 6800, 111, false, 8000);
+    assert(liveGlide(g, 7100, 111, false, 8000).ms > 100, 'pulling: a full glide');
+    assert.strictEqual(liveGlide(g, 4600, 111, false, 8000).ms, JUMP_MS, 'the upshift: at once');
+    assert.strictEqual(liveGlide(g, 6200, 111, false, 8000).ms, JUMP_MS, 'a downshift blip: at once');
+    assert(liveGlide(g, 6500, 111, true, 8000).ms > 100);
 }
 
 /* the gear readout: D3, S3 in the sport gate, the number alone while shifting by hand */

@@ -258,6 +258,11 @@ times a second. While driving, each glide now starts where the needle is and las
 time between rpms (x1.15), so the needle never stops waiting for the next one. Measured on the desk: the sweep
 went from 9-15 stops to none (only the planned hold at the top); driving from about 20 stops in 5 s to none.
 
+**Shifts (0.13.7):** a reading that jumps 800 rpm or more from the last one (an upshift, a downshift blip, the clutch
+let in) is shown in 50 ms instead of glided over the time to the next reading, so the needle drops with the shift
+about 75 ms sooner. A pull never jumps that much in one reading, so it still glides. What is left is the car's: a
+shift is seen only at the next reading (up to ~110 ms later), plus however late the head unit gets the rpm.
+
 **Needle response (0.13.2):** the car sends a new rpm about 9 times a second (the app's screen shows it). *Smooth*
 (default): the needle glides from each reading to the next over the time between them, so it shows each one a
 reading (about 110 ms) late. *Quick*: while the revs move steadily it aims one reading ahead, so it is about where

@@ -628,8 +628,7 @@ class ClassicCluster {
                 if (!this.sweep && v.rpmSeq != null) {
                     if (v.rpmSeq !== d.rpmSeq) {
                         d.rpmSeq = v.rpmSeq;
-                        const to = lerp(F.A0, F.A1, clamp01(aimRpm(d, v.rpm || 0, s.needleResponse === 'quick') / (d.spec.max || 8000)));
-                        const ms = glideMs(v.rpmEvery);
+                        const { to, ms } = liveGlide(d, v.rpm || 0, v.rpmEvery, s.needleResponse === 'quick', d.spec.max || 8000);
                         if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) {
                             const from = glideAt(d, now);
                             d.needleAt = to; d.glideNow = { from, to, t0: now, ms };
@@ -732,8 +731,7 @@ class ClassicCluster {
         if (!this.sweep && v.rpmSeq != null) {
             if (v.rpmSeq !== d.rpmSeq) {
                 d.rpmSeq = v.rpmSeq;
-                const to = lerp(F.A0, F.A1, clamp01(aimRpm(d, v.rpm || 0, s.needleResponse === 'quick') / max));
-                const ms = glideMs(v.rpmEvery);
+                const { to, ms } = liveGlide(d, v.rpm || 0, v.rpmEvery, s.needleResponse === 'quick', max);
                 if (Math.abs(to - d.needleAt) >= ROTATE_MIN_DEG) { d.glideNow = { from: glideAt(d, now), to, t0: now, ms }; d.needleAt = to; }
             }
         } else if (!this.sweep && Math.abs(a - d.needleAt) >= ROTATE_MIN_DEG && now - (d.needleAnimAt || 0) >= ANIM_MS) {
@@ -902,6 +900,19 @@ function glideAt(d, now) {
     const f = Math.max(0, Math.min(1, (now - g.t0) / g.ms));
     return g.from + (g.to - g.from) * f;
 }
+/*
+ * A shift (or a blip, or the clutch let in) moves the revs more in one reading than the engine
+ * pulling ever does (at 9 readings a second, a pull in 1st is ~300-550 rpm a reading; an upshift at
+ * the redline drops 1500-2700). Such a jump is shown at once, in JUMP_MS, not glided over the time
+ * to the next reading, which put the needle ~0.1 s further behind the shift than behind the revs.
+ */
+const JUMP_RPM = 800, JUMP_MS = 50;
+/** The next live glide on a new rpm from the car: { to (degrees), ms }. */
+function liveGlide(d, rpm, every, quick, max) {
+    const jump = d.lastRpm != null && Math.abs(rpm - d.lastRpm) >= JUMP_RPM;
+    const to = lerp(F.A0, F.A1, clamp01(aimRpm(d, rpm, quick) / max));
+    return { to, ms: jump ? JUMP_MS : glideMs(every) };
+}
 const QUICK_MAX = 700;
 function aimRpm(d, rpm, quick) {
     const delta = d.lastRpm == null ? 0 : rpm - d.lastRpm;
@@ -939,4 +950,4 @@ const clamp01 = (x) => (!(x > 0) ? 0 : x > 1 ? 1 : x);     // NaN and -Infinity:
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
-module.exports = { aimRpm, ClassicCluster, arcTexts, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };
+module.exports = { aimRpm, liveGlide, JUMP_MS, ClassicCluster, arcTexts, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };
