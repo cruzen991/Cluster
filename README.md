@@ -63,6 +63,28 @@ artwork. **Parked only** by default (it pauses while the car moves; setting *Par
 - **Status: untested on a car.** Tested on a PC: its rules and controls with `node apps/mx_road_hopper/test.js`, a
   bot that plays it (reaching homes on every speed), and the kit's desk preview with the GPU renderer stand-in.
 
+## Dead Rim (game)
+
+A third app: hold the rim of a pit while the dead climb up its lanes ([picture](docs/dead-rim.png)). An original
+game in the spirit of the arcade tube shooters, with its own artwork. **Parked only** by default (setting
+*Parked only*).
+
+- **Controls:** turn the iDrive knob to move round the rim, one lane a click. Setting *Fire*: **automatic**
+  (default; the gun fires on its own, a press throws a grenade) or **press to fire** (press: shoot, hold: grenade).
+  If the car doesn't send the controller's state to apps, turn to pick Left / Fire / Grenade / Right on the
+  hidden buttons and press to use it.
+- **The dead:** walkers (slow; at the rim they shuffle along towards you), runners (fast), crawlers (change lanes as
+  they climb), bloaters (three hits; burst into two crawlers) and spitters (stop part-way and spit up their lane;
+  spit can be shot down). One of them at the rim in your lane grabs you after 0.3 s unless you shoot it; a rim
+  lane with one on it flashes red. A new kind joins on each of levels 2-5.
+- **Rules:** clear the level's wave to move on; each level is a new pit shape (ring, square, trench, star,
+  triangle, wall) and 10 % faster (up to 2.2x). One grenade a level (up to 3 kept) clears the pit. 3 lives, an
+  extra one every 20,000. A lost life sends the dead in the pit back to the bottom to come again. Best score kept.
+- **Sound: none**, as for Road Hopper.
+- **Status: untested on a car.** Tested on a PC: rules and controls with `node apps/mx_dead_rim/test.js`, including
+  a bot that plays every speed and both fire modes; every pit and state drawn on both the PNG and GPU paths.
+  Difficulty is a first guess and will want tuning after real play.
+
 ## Install
 
 1. Have the MGU Store on the head unit (root SSH access is needed once for that; see its README).
