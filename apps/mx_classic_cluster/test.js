@@ -171,14 +171,14 @@ for (const st of ['tech']) {
         assert(q.x >= 0 && q.y >= 0 && q.x + q.w <= W && q.y + q.h <= H, k + ' inside the panel');
     });
     assert(L.left.x + L.left.w <= L.dial.x + 60 && L.right.x >= L.dial.x + L.dial.w - 60, 'readouts beside the dial');
-    const s = { tempUnit: 'f', torqueUnit: 'lbft', units: 'mph' };
+    const s = { tempUnit: 'f', torqueUnit: 'lbft', units: 'mph', torqueShow: true };
     const v = { oilC: 90, coolC: 88, iatC: 30, outsideC: 18, boostPsi: 12.34, torqueNm: 400, fuel: 0.5, speedText: '48', gearText: 'D3', rangeText: '212 mi', odoText: '41,820 mi', modeText: 'Sport Plus' };
     const t = arcTexts(s, v, false);
     assert.deepStrictEqual([t.left.oil, t.left.cool, t.right.boost, t.right.torque, t.right.tq, t.strip.intake, t.strip.outside, t.strip.mode, t.right.odo],
         ['194', '190', '12', '295', 'LB-FT', '86°F', '64°F', 'SPORT PLUS', '41,820 MI']);
     assert.strictEqual(arcTexts(s, Object.assign({}, v, { peakPsi: 18.6 }), false).right.peak, 'PEAK 19');
     assert.strictEqual(arcTexts(s, Object.assign({}, v, { peakPsi: 0.4 }), false).right.peak, '', 'no peak shown under 1 psi');
-    const tn = arcTexts({ tempUnit: 'c', torqueUnit: 'nm', units: 'kmh' }, { boostPsi: null, torqueNm: NaN, iatC: null }, false);
+    const tn = arcTexts({ tempUnit: 'c', torqueUnit: 'nm', units: 'kmh', torqueShow: true }, { boostPsi: null, torqueNm: NaN, iatC: null }, false);
     assert.deepStrictEqual([tn.right.boost, tn.right.torque, tn.right.tq, tn.strip.intake, tn.left.oil, tn.centre.unit], ['--', '--', 'NM', '--', '--', 'KM/H']);
     const p = new A.Panel(L.right.w, L.right.h);
     A.drawRight(p, t.right);
@@ -487,10 +487,25 @@ const PL = require('./preload');
     assert(liveGlide(g, 6500, 111, true, 8000).ms > 100);
 }
 
+/* the torque readout off (the default): no text, no label, no GPU field */
+{
+    const { arcTexts } = require('./cluster');
+    const A = require('./arc');
+    const F = require('./faces');
+    const t = arcTexts({ tempUnit: 'f', torqueUnit: 'lbft', units: 'mph' }, { torqueNm: 400, boostPsi: 12 }, false);
+    assert.strictEqual(t.right.torque, null, 'off by default');
+    const p = new A.Panel(540, 500); p.gpu = { boost: {} };
+    A.drawRight(p, t.right);
+    assert(!('lbl2' in p.sig) && !('torque' in p.sig), 'nothing drawn in its place: ' + Object.keys(p.sig).join(' '));
+    const on = new A.Panel(540, 500); on.gpu = { boost: {}, torque: {} };
+    A.drawRight(on, arcTexts({ tempUnit: 'f', torqueUnit: 'lbft', units: 'mph', torqueShow: true }, { torqueNm: 400, boostPsi: 12 }, false).right);
+    assert('lbl2' in on.sig && on.gpu.torque.text === '295', 'on: as before');
+}
+
 /* a glitched value too long for its readout shows dashes */
 {
     const { arcTexts } = require('./cluster');
-    const s = { tempUnit: 'f', torqueUnit: 'lbft', units: 'kmh' };
+    const s = { tempUnit: 'f', torqueUnit: 'lbft', units: 'kmh', torqueShow: true };
     const t = arcTexts(s, { speedText: '1024', oilC: 1e6, coolC: -1e6, torqueNm: 1e7, boostPsi: 9999, outsideC: 20, iatC: 30 }, false);
     assert.strictEqual(t.centre.speed, '---'); assert.strictEqual(t.left.oil, '--'); assert.strictEqual(t.left.cool, '--');
     assert.strictEqual(t.right.torque, '--'); assert.strictEqual(t.right.boost, '--');
@@ -630,7 +645,7 @@ function preloadDrive(done) {
         animate(ref, o) { const l = layers.get(ref), n = l.anims.size + 1; l.anims.set(n, Object.assign({ op: 'animate', ref, anim: n }, o)); sent.push({ op: 'animate', ref, o }); return n; },
         _send(m) { sent.push({ op: m.op, ref: m.ref, o: m }); },
     };
-    const s = { on: true, style: 'arc', torqueUnit: 'lbft', shift: true, units: 'mph', tempUnit: 'f', redline: 7000, sweep: false, backdrop: 'full',
+    const s = { on: true, style: 'arc', torqueUnit: 'lbft', torqueShow: true, shift: true, units: 'mph', tempUnit: 'f', redline: 7000, sweep: false, backdrop: 'full',
         tank: 59, dx: 0, dy: 0, needles: 'preload', retake: false, notch: true, arcBg: 'grid' };
     const cl = new C.ClassicCluster({ log: { info() {}, warn() {} }, settings: () => s, app: 'test' });
     cl.cr = fake; cl.enabled = true; cl.state = { target: 'shown', reason: '', layers: {}, why: {}, budget: '' };

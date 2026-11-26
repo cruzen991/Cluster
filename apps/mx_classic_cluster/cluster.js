@@ -221,7 +221,7 @@ class ClassicCluster {
      */
     build() {
         const s = this.getSettings();
-        const key = JSON.stringify([s.shift, s.style, s.arcBg, s.notch, s.bottomStrip, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake, !!this.preloadOff]);
+        const key = JSON.stringify([s.shift, s.style, s.arcBg, s.notch, s.bottomStrip, !!s.torqueShow, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake, !!this.preloadOff]);
         if (!this.cr || key === this.faceKey) return;
         this.faceKey = key;
         const gen = this.buildGen = (this.buildGen || 0) + 1, cr = this.cr;
@@ -447,7 +447,8 @@ class ClassicCluster {
             cr.pixels(assets[key], null, at.r8);
         });
         this.assetRefs = assets;
-        const FIELDS = { left: { oil: ['figs96', A.ROW.v1], cool: ['figs96', A.ROW.v2] }, right: { boost: ['figs96', A.ROW.v1], torque: ['figs96', A.ROW.v2] },
+        // the torque readout off (setting torqueShow): no layer for it at all
+        const FIELDS = { left: { oil: ['figs96', A.ROW.v1], cool: ['figs96', A.ROW.v2] }, right: Object.assign({ boost: ['figs96', A.ROW.v1] }, s.torqueShow ? { torque: ['figs96', A.ROW.v2] } : {}),
             centre: { speed: ['figs118', A.CENTRE_SPEED], gear: ['gear', A.CENTRE_GEAR] }, strip: {} };
         this.panels = {};
         for (const key of ['centre', 'left', 'right', 'strip']) {
@@ -893,7 +894,7 @@ function arcTexts(s, v, sweep) {
     return {
         centre: { gear: sweep ? '88' : (v.gearText || '-'), speed: sweep ? '888' : (v.speedText == null ? '---' : fit(String(v.speedText), 3, '---')), unit: s.units === 'kmh' ? 'KM/H' : 'MPH' },
         left: { oil: T(v.oilC), cool: T(v.coolC), tu, oilWarn: v.oilC >= 130, coolWarn: v.coolC >= 112, fuel: v.fuel, range: up(v.rangeText || '---') },
-        right: { boost, torque: tq, tq: lb ? 'LB-FT' : 'NM', odo: up(v.odoText || '---'), peak: v.peakPsi >= 1 ? 'PEAK ' + Math.round(v.peakPsi) : '' },
+        right: { boost, torque: s.torqueShow ? tq : null, tq: lb ? 'LB-FT' : 'NM', odo: up(v.odoText || '---'), peak: v.peakPsi >= 1 ? 'PEAK ' + Math.round(v.peakPsi) : '' },
         strip: { outside: T(v.outsideC) === '--' ? '--' : T(v.outsideC) + tu, mode: up(v.modeText) || 'DRIVE', intake: T(v.iatC) === '--' ? '--' : T(v.iatC) + tu },
     };
 }

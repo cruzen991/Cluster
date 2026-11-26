@@ -20,6 +20,7 @@ const F = require('./faces');
 const { ClassicCluster, tachMax } = require('./cluster');
 const { Guard } = require('./guard');
 const { RpmSource } = require('./rpmsource');
+const TEMP_EVERY_MS = 10000;   // oil and coolant temperatures: once every 10 s
 
 const W = 1600, H = 520;
 const STALE_MS = 1500;
@@ -53,6 +54,7 @@ mgu.run({
             retake: settings.get('retake') === true,
             style: settings.get('style') === 'arc' ? 'arc' : 'tech',     // 'sport' / 'classic' saved by an older version: tech
             torqueUnit: settings.get('torqueUnit') === 'nm' ? 'nm' : 'lbft',
+            torqueShow: settings.get('torqueShow') === 'on',
             needleResponse: settings.get('needleResponse') === 'quick' ? 'quick' : 'smooth',
             bottomStrip: ['open', 'gear', 'nogear'].indexOf(settings.get('bottomStrip')) >= 0 ? settings.get('bottomStrip') : 'covered',
             notch: settings.get('notch') !== false,
@@ -73,6 +75,14 @@ mgu.run({
         // the engine speed: from whichever signal comes more often (rpmsource.js); each new reading
         // goes to the needle at once, not at the next tick of the read loop below
         let rpmSeq = 0, rpmNow = 0, rpmEvery = 111, pushReading = () => {}, liveNow = false;
+        // oil and coolant temperatures: shown as they were at most TEMP_EVERY_MS ago (they change slowly; a
+        // value flicking between two degrees redrew its readout); a first value, or one after none, at once
+        let temps = { at: 0, oilC: null, coolC: null };
+        const heldTemps = (d, now) => {
+            const oilC = typeof d.oil === 'number' ? d.oil : null, coolC = typeof d.coolant === 'number' ? d.coolant : null;
+            if (now - temps.at >= TEMP_EVERY_MS || (temps.oilC === null && oilC !== null) || (temps.coolC === null && coolC !== null)) temps = { at: now, oilC, coolC };
+            return temps;
+        };
         const rpmSrc = new RpmSource((rpm, every) => { rpmNow = rpm; rpmEvery = every; rpmSeq++; pushReading(rpm, rpmSeq, every); });
         const seenVals = {};
         const seen = (what, raw) => {
@@ -80,7 +90,10 @@ mgu.run({
             if (seenVals[k] || Object.keys(seenVals).length > 40) return;
             seenVals[k] = true; log.info(what + ' ' + JSON.stringify(raw));
         };
-        const car = new Car(ctx, ['rpm', 'speed', 'temps', 'gear', 'torque'], {
+        // the torque readout off (the default): the car's torque is not even subscribed to, so its updates
+        // (many a second while driving) cost nothing. Decided at start: the kit cannot unsubscribe.
+        const torqueAtStart = settings.get('torqueShow') === 'on';
+        const car = new Car(ctx, ['rpm', 'speed', 'temps', 'gear'].concat(torqueAtStart ? ['torque'] : []), {
             [ENV]: { ExteriorTemperature: (v) => {
                 const r = v && v.temperatureExterior;
                 if (typeof r === 'number' && r >= 0 && r < 255) { outsideC = r * 0.5 - 40; outsideAt = Date.now(); }
@@ -204,13 +217,13 @@ mgu.run({
                 iatC: demo ? 34 : (now - iatAt < IAT_STALE_MS ? iatC : null) };
             if (!usable) return Object.assign({ speed: 0, rpm: 0, fuel: null, oil: null, oilC: null, coolC: null, boost: null, boostPsi: null, torqueNm: null, speedText: '---', gearText: '-', live: false }, info);
             const kmh = d.speed || 0, speed = s.units === 'kmh' ? kmh : kmh / 1.609344;
-            const oilC = typeof d.oil === 'number' ? d.oil : null;
+            const { oilC, coolC } = heldTemps(d, now);
             const oilDial = oilC === null ? null : s.tempUnit === 'f' ? ((oilC * 9 / 5 + 32) - 120) / 180 : (oilC - 50) / 100;
             const fuel = d.demo ? 0.62 : fuelL === null ? null : fuelL / s.tank;
             const boostPsi = d.demo ? Math.max(0, Math.min(19, ((d.rpm || 0) - 1500) / 3500 * 19)) : boostPsiOf(boostBar, boostAt, now, s.boostRef);
             return {
                 speed, rpm: d.demo ? d.rpm || 0 : rpmNow, rpmSeq: d.demo ? null : rpmSeq, rpmEvery, fuel, oil: oilDial, oilC, boostPsi, boost: boostPsi === null ? null : boostPsi / F.BOOST_MAX,
-                coolC: typeof d.coolant === 'number' ? d.coolant : null, torqueNm: typeof d.torque === 'number' ? d.torque : null,
+                coolC, torqueNm: typeof d.torque === 'number' ? d.torque : null,
                 speedText: String(Math.round(speed)), gearText: gearText(d, gm), live: !d.demo,
                 rangeText: info.rangeText, odoText: info.odoText, modeText: info.modeText, outsideC: info.outsideC, iatC: info.iatC,
             };

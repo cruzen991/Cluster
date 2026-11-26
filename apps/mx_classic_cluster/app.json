@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
-  "version": "0.14.2",
+  "version": "0.14.3",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -154,6 +154,22 @@
         [
           "c",
           "Celsius"
+        ]
+      ]
+    },
+    {
+      "key": "torqueShow",
+      "label": "Torque readout (Arc style; the car's torque is read only if this is on when the app starts)",
+      "type": "choice",
+      "default": "off",
+      "options": [
+        [
+          "off",
+          "Off"
+        ],
+        [
+          "on",
+          "On"
         ]
       ]
     },

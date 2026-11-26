@@ -258,6 +258,13 @@ times a second. While driving, each glide now starts where the needle is and las
 time between rpms (x1.15), so the needle never stops waiting for the next one. Measured on the desk: the sweep
 went from 9-15 stops to none (only the planned hold at the top); driving from about 20 stops in 5 s to none.
 
+**Torque off, temperatures every 10 s (0.14.3):** the torque readout is off by default (Settings > Torque readout):
+no label, no readout layer, and the car's torque signal is not subscribed to at all, so its updates cost nothing
+(whether it is subscribed is decided when the app starts; the kit cannot unsubscribe). Oil and coolant
+temperatures are shown as they were at most 10 s ago (a first value at once), so a value flicking between two
+degrees no longer redraws its readout. In the stand-in renderer, torque off took one layer and about 5 readout
+updates a second away, beside ~227 needle and arc updates a second: a small share.
+
 **Bottom strip test (0.14.1; Settings > Bottom strip, Arc style):** other projects found that a layout leaving
 the car's own bottom bar uncovered makes the cluster stop drawing its black boxes (the gear box right of centre,
 and an M car's two): Cluster Layouts (found and tested by thatgrayg22) and bimmer-lab issue 5 (concpriv: "definitely

@@ -420,8 +420,11 @@ function drawRight(p, v) {
     tabular(p, 'boost', ROW.v1, X, ROW.b1, v.boost, 96, WHITE, 'PSI');
     // the drive's peak boost, small and dim on the label's line, right of it; nothing until there is one
     p.cell('peak', { x: 360, y: 26, w: 170, h: 28 }, v.peak || '', (cv) => { if (v.peak) cv.text(v.peak, 372, 46, 16, ORANGE_DIM, { font: 'orbm', literal: true, spacing: 3 }); });
-    p.cell('lbl2', { x: 0, y: 196, w: 540, h: 40 }, 'x', (cv) => LBL(cv, X, ROW.l2, 'TORQUE'));
-    tabular(p, 'torque', ROW.v2, X, ROW.b2, v.torque, 96, WHITE, v.tq);
+    // torque null: its readout is off (setting torqueShow); its place stays empty
+    if (v.torque != null) {
+        p.cell('lbl2', { x: 0, y: 196, w: 540, h: 40 }, 'x', (cv) => LBL(cv, X, ROW.l2, 'TORQUE'));
+        tabular(p, 'torque', ROW.v2, X, ROW.b2, v.torque, 96, WHITE, v.tq);
+    }
     p.cell('odoL', { x: 0, y: 396, w: 540, h: 36 }, 'x', (cv) => LBL(cv, X, 420, 'ODOMETER'));
     p.cell('odo', ROW.foot, v.odo, (cv) => cv.text(v.odo, X, ROW.fb, 26, WHITE, { font: 'orb', align: 'center', literal: true }));
 }
