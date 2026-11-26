@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
-  "version": "0.14.3",
+  "version": "0.14.4",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -350,6 +350,26 @@
       ]
     },
     {
+      "key": "needleRate",
+      "label": "Needle update rate (fewer a second: less work for the cluster's graphics)",
+      "type": "choice",
+      "default": "60",
+      "options": [
+        [
+          "60",
+          "60 a second"
+        ],
+        [
+          "30",
+          "30 a second"
+        ],
+        [
+          "20",
+          "20 a second"
+        ]
+      ]
+    },
+    {
       "key": "bottomStrip",
       "label": "Bottom strip (test; Arc style)",
       "type": "choice",
@@ -358,6 +378,10 @@
         [
           "covered",
           "Covered (default)"
+        ],
+        [
+          "letter",
+          "Open over BMW's gear letter only (80 x 60, bottom right)"
         ],
         [
           "open",

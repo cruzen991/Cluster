@@ -530,6 +530,28 @@ const PL = require('./preload');
     assert(A.arcLayout(0, false).dial.y + A.DH <= A.STRIP_TOP);
 }
 
+/* the gear-letter mode: BMW's letter (x 1380-1460, y 660-720) uncovered, the layout otherwise as it was */
+{
+    const A = require('./arc');
+    assert.deepStrictEqual(A.stripCovers('letter'), [[0, 1380], [1460, 1920]]);
+    assert(A.stripOpen('letter') && !A.stripShrinks('letter'));
+    assert.strictEqual(A.stripTop('letter'), 660);
+    for (const notch of [true, false]) {
+        const L = A.arcLayout(0, notch, 'letter');
+        assert.deepStrictEqual(L, A.arcLayout(0, notch, 'covered'), 'the tach keeps its size');
+        assert(L.dial.x + Math.round(A.DW * L.scale) <= 1380 && L.strip.x + L.strip.w <= 1380, 'nothing of ours reaches the window');
+    }
+}
+
+/* the needle update rate */
+{
+    const { motionRate } = require('./cluster');
+    assert.strictEqual(motionRate({}), 60);
+    assert.strictEqual(motionRate({ needleRate: '30' }), 30);
+    assert.strictEqual(motionRate({ needleRate: 20 }), 20);
+    assert.strictEqual(motionRate({ needleRate: 45 }), 60, 'only the offered rates');
+}
+
 /* the renderer client: a batch's messages leave in one write */
 {
     const CR = require('./cluster_render_client');

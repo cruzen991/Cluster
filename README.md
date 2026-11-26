@@ -258,6 +258,18 @@ times a second. While driving, each glide now starts where the needle is and las
 time between rpms (x1.15), so the needle never stops waiting for the next one. Measured on the desk: the sweep
 went from 9-15 stops to none (only the planned hold at the top); driving from about 20 stops in 5 s to none.
 
+**Needle update rate and BMW's gear letter (0.14.4), from KurdBimmer Themes (FDX100/KB, tested on a G20):**
+- *Settings > Needle update rate:* 60 (default, as before), 30 or 20 a second. Every update makes the cluster's own
+  GPU draw all our layers again; KurdBimmer found that GPU to be the limit on a G20 (their needles run at 8-20 a
+  second, and lowering the rate is their fix for steppy needles). The glide keeps the needle in the right place at
+  each update. Changes at once, while driving too.
+- *Settings > Bottom strip > Open over BMW's gear letter only:* KurdBimmer found BMW draws its black gear box (x
+  1406-1597, y 342-419, over our torque) only while a layout covers BMW's gear letter in the bottom strip, and
+  leave an 80 x 60 window over it (x 1380-1460, y 660-720) in every theme. This mode does the same: the background
+  ends at y 660 and the strip either side of the window is covered with the background's own bottom, so the layout
+  looks as before (tach full size, our bottom row kept) apart from BMW's letter showing in that corner. No layer of
+  ours reaches into the window (checked in both drawing modes, with and without the camera notch).
+
 **Torque off, temperatures every 10 s (0.14.3):** the torque readout is off by default (Settings > Torque readout):
 no label, no readout layer, and the car's torque signal is not subscribed to at all, so its updates cost nothing
 (whether it is subscribed is decided when the app starts; the kit cannot unsubscribe). Oil and coolant

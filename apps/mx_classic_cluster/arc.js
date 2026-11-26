@@ -61,15 +61,29 @@ const NOTCH_SCALE = 1.04, NOTCH_CY = 466;  // 0.12.1: from the car's photo, the 
  * picture's rectangle, not only what it paints, ending at STRIP_TOP.
  */
 const STRIP_TOP = 658, GEAR_WINDOW = [1196, 1424], OPEN_SCALE = 0.96, OPEN_CY = 439;
-const stripOpen = (mode) => mode === 'open' || mode === 'gear' || mode === 'nogear';
-/** The parts of the band y STRIP_TOP-720 we keep covered (black) for a bottomStrip mode: [x0, x1] each. */
+/*
+ * Mode 'letter': only BMW's gear letter left uncovered, LETTER_WINDOW x LETTER_TOP-720 (80 x 60). KurdBimmer Themes
+ * (FDX100/KB, tested on a G20; shared/visible.js, hud.js GEAR_WIN) found BMW draws its black gear box (x 1406-1597,
+ * y 342-419: over our torque) only while a layout covers that letter, and leaves this window free in every theme.
+ * Nothing of ours is near it (the tach ends x ~1340, our bottom row x 1360), so the layout stays as it is: only
+ * the background is cut at LETTER_TOP and the strip beside the window covered with the background's own bottom.
+ */
+const LETTER_TOP = 660, LETTER_WINDOW = [1380, 1460];
+/** The tach made smaller and our own bottom row hidden (the wide-open test modes). */
+const stripShrinks = (mode) => mode === 'open' || mode === 'gear' || mode === 'nogear';
+/** The background cut above the strip (every mode but 'covered'). */
+const stripOpen = (mode) => stripShrinks(mode) || mode === 'letter';
+/** Where the background ends in a mode with the strip open. */
+const stripTop = (mode) => (mode === 'letter' ? LETTER_TOP : STRIP_TOP);
+/** The parts of the band y stripTop-720 we keep covered for a bottomStrip mode: [x0, x1] each. */
 function stripCovers(mode) {
+    if (mode === 'letter') return [[0, LETTER_WINDOW[0]], [LETTER_WINDOW[1], 1920]];
     if (mode === 'gear') return [[0, GEAR_WINDOW[0]], [GEAR_WINDOW[1], 1920]];
     if (mode === 'nogear') return [GEAR_WINDOW];
     return [];
 }
 function arcLayout(dy, notch, strip) {
-    const open = notch && stripOpen(strip);
+    const open = notch && stripShrinks(strip);
     const y = dy || 0, k = open ? OPEN_SCALE : notch ? NOTCH_SCALE : 1, cy = y + (open ? OPEN_CY : notch ? NOTCH_CY : DCY);
     const sized = (w, h, px, py) => Object.assign({ x: Math.round(960 - px * k), y: Math.round(cy - py * k), w: Math.round(w * k), h: Math.round(h * k) },
         k !== 1 ? { iw: w, ih: h, sampling: 'bilinear' } : {});
@@ -484,7 +498,7 @@ function bigText(cv, str, x, y, size, col) {
 
 module.exports = {
     bigText, needleSprite, gridBackground, graphiteBackground, background, BACKGROUNDS, BG_W, BG_H,
-    NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, stripOpen, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
+    NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
     CENTRE_GEAR, CENTRE_SPEED, CENTRE_SPEED_BASE, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,
 };

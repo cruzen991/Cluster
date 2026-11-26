@@ -53,7 +53,9 @@ const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
 const MAX_LAYERS = 8;              // cluster-render's per-client limit before 0.4.2
 const MAX_LAYERS_PRE = 64;         // and from 0.4.2 (the pre-loaded mode needs it)
 const SCALE_MIN = 0.003;
-const MOTION_FPS = 60;             // the needle's (and pre-loaded: covers', numerals') places sent this often
+const MOTION_FPS = 60;             // the needle's (and pre-loaded: covers', numerals') places sent this often, by default
+const MOTION_RATES = [60, 30, 20];  // the setting needleRate
+const motionRate = (s) => (s && MOTION_RATES.indexOf(Number(s.needleRate)) >= 0 ? Number(s.needleRate) : MOTION_FPS);
 const MOTION_MIN_DEG = 0.05;       // a move smaller than this is not sent
 const GLIDE_STRETCH = 1.15;        // a live glide lasts this much longer than the time between rpms, so the
                                    // needle is still moving when the next one comes (no stop between glides)
@@ -116,18 +118,29 @@ class ClassicCluster {
 
     /** Starts the needle loop; the cluster itself waits for enable(true). */
     start() {
-        // one loop: the needle's place every frame (MOTION_FPS), the rest (tick) every other frame, the
-        // two in one write to the renderer (_batched), so they reach the cluster in the same flush
-        let last = Date.now();
+        // one loop: the needle's place every frame (the setting needleRate: 60, 30 or 20 a second), the rest
+        // (tick) at most FPS a second, the two in one write to the renderer (_batched), so they reach the
+        // cluster in the same flush. Each frame makes the cluster's own GPU draw every layer again: fewer
+        // a second is less for it to do (KurdBimmer Themes, on a G20, run theirs at 8-20), while the glide
+        // keeps the needle where it should be at each one.
+        this.lastTickAt = Date.now();
+        this._loop(motionRate(this.getSettings()));
+    }
+
+    _loop(rate) {
+        if (this.motionTimer) clearInterval(this.motionTimer);
+        this.motionRate = rate;
         this.motionTimer = setInterval(() => {
             const now = Date.now();
             try {
                 this._batched(() => {
-                    if (now - last >= 1000 / FPS - 4) { this.tick(now - last, now); last = now; }
+                    if (now - this.lastTickAt >= 1000 / FPS - 4) { this.tick(now - this.lastTickAt, now); this.lastTickAt = now; }
                     this.motion(now);
                 });
+                const want = motionRate(this.getSettings());
+                if (want !== this.motionRate && this.motionTimer) this._loop(want);          // the setting changed (not once stopped)
             } catch (e) { if (this.opts.onError) this.opts.onError(e); }
-        }, 1000 / MOTION_FPS);
+        }, 1000 / rate);
     }
 
     /** fn's messages to the renderer in one write (cluster_render_client.js batch()). */
@@ -308,14 +321,24 @@ class ClassicCluster {
             R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: A.BG_W, ih: A.BG_H, sampling: 'bilinear' });
             cr.pixels(R.back, null, buf(art.bg));
         } else {
-            // the bottom strip open (a test, A.stripOpen): the background ends at STRIP_TOP, its own top part
-            // (not squeezed), and black covers whatever of the strip this mode keeps covered
-            const bh = Math.floor(A.BG_H * A.STRIP_TOP / H);
-            R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: Math.round(bh * H / A.BG_H), iw: A.BG_W, ih: bh, sampling: 'bilinear' });
+            // the bottom strip open (A.stripOpen): the background ends at the mode's top, its own top part (not
+            // squeezed); what of the strip the mode keeps covered gets the background's own bottom ('letter', so it
+            // looks as before) or black (the wide-open test modes). No layer of ours reaches into the open part.
+            const top = A.stripTop(s.bottomStrip), k = A.BG_H / H;
+            const bh = Math.floor(top * k);
+            R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: Math.round(bh / k), iw: A.BG_W, ih: bh, sampling: 'bilinear' });
             cr.pixels(R.back, null, crop(art.bg, { x: 0, y: 0, w: A.BG_W, h: bh }));
             A.stripCovers(s.bottomStrip).forEach(([x0, x1], i) => {
-                const ref = R['stripCover' + i] = img({ klass: 'ambient', x: x0, y: A.STRIP_TOP, w: x1 - x0, h: H - A.STRIP_TOP, iw: 4, ih: 4 });
-                cr.pixels(ref, null, blackPx(4, 4));
+                const own = s.bottomStrip === 'letter' && Number.isInteger(x0 * k) && Number.isInteger(x1 * k) && Number.isInteger(top * k);
+                const q = { klass: 'ambient', x: x0, y: top, w: x1 - x0, h: H - top };
+                if (own) {
+                    const iw = (x1 - x0) * k, ih = A.BG_H - top * k;
+                    const ref = R['stripCover' + i] = img(Object.assign(q, { iw, ih, sampling: 'bilinear' }));
+                    cr.pixels(ref, null, crop(art.bg, { x: x0 * k, y: top * k, w: iw, h: ih }));
+                } else {
+                    const ref = R['stripCover' + i] = img(Object.assign(q, { iw: 4, ih: 4 }));
+                    cr.pixels(ref, null, blackPx(4, 4));
+                }
             });
         }
 
@@ -358,7 +381,7 @@ class ClassicCluster {
 
         this.panels = {};
         for (const k of ['centre', 'left', 'right', 'strip']) {
-            R[k] = img(Object.assign({ z: k === 'centre' ? 3 : 1 }, L[k], k === 'strip' && open ? { visible: false } : {}));
+            R[k] = img(Object.assign({ z: k === 'centre' ? 3 : 1 }, L[k], k === 'strip' && A.stripShrinks(s.bottomStrip) ? { visible: false } : {}));
             this.panels[k] = { ref: R[k], p: new A.Panel(L[k].iw || L[k].w, L[k].ih || L[k].h) };
         }
         this.panelAt = 0; this.slow = null;
@@ -459,7 +482,7 @@ class ClassicCluster {
                 R[key + '#' + i] = img(Object.assign({ z, x: Lk.x + Math.round(b.x * kk), y: Lk.y + Math.round(b.y * kk), w: Math.round(b.w * kk), h: Math.round(b.h * kk) },
                     kk !== 1 ? { iw: b.w, ih: b.h, sampling: 'bilinear' } : {}));
             });
-            else R[key] = img(Object.assign({ z }, Lk, key === 'strip' && A.stripOpen(s.bottomStrip) ? { visible: false } : {}));
+            else R[key] = img(Object.assign({ z }, Lk, key === 'strip' && A.stripShrinks(s.bottomStrip) ? { visible: false } : {}));
             const p = new A.Panel(Lk.iw || Lk.w, Lk.ih || Lk.h);
             p.gpu = {};
             Object.keys(FIELDS[key]).forEach((f) => {
@@ -983,4 +1006,4 @@ const clamp01 = (x) => (!(x > 0) ? 0 : x > 1 ? 1 : x);     // NaN and -Infinity:
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
-module.exports = { aimRpm, liveGlide, JUMP_MS, ClassicCluster, arcTexts, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };
+module.exports = { aimRpm, liveGlide, JUMP_MS, motionRate, ClassicCluster, arcTexts, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };
