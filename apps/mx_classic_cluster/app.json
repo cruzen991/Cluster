@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
-  "version": "0.14.5",
+  "version": "0.15.0",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -79,25 +79,8 @@
       "default": true
     },
     {
-      "key": "style",
-      "label": "Gauge style",
-      "type": "choice",
-      "default": "tech",
-      "reset": 2,
-      "options": [
-        [
-          "arc",
-          "Arc (one tach, big readouts)"
-        ],
-        [
-          "tech",
-          "Tech (lit ring, shift lights)"
-        ]
-      ]
-    },
-    {
       "key": "arcBg",
-      "label": "Background (Arc style)",
+      "label": "Background",
       "type": "choice",
       "default": "grid",
       "options": [
@@ -121,7 +104,7 @@
     },
     {
       "key": "notch",
-      "label": "Driver camera above the cluster (Arc style: smaller tach clear of it)",
+      "label": "Driver camera above the cluster (tach kept clear of it)",
       "type": "bool",
       "default": true
     },
@@ -159,7 +142,7 @@
     },
     {
       "key": "torqueShow",
-      "label": "Torque readout (Arc style; the car's torque is read only if this is on when the app starts)",
+      "label": "Torque readout (the car's torque is read only if this is on when the app starts)",
       "type": "choice",
       "default": "off",
       "options": [
@@ -175,7 +158,7 @@
     },
     {
       "key": "torqueUnit",
-      "label": "Torque (Arc style)",
+      "label": "Torque unit",
       "type": "choice",
       "default": "lbft",
       "options": [
@@ -236,122 +219,8 @@
       ]
     },
     {
-      "key": "boostRef",
-      "label": "Boost signal",
-      "type": "choice",
-      "default": "gauge",
-      "options": [
-        [
-          "gauge",
-          "Gauge (0 at idle)"
-        ],
-        [
-          "absolute",
-          "Absolute (subtract 14.7 psi)"
-        ]
-      ]
-    },
-    {
-      "key": "tank",
-      "label": "Fuel tank size",
-      "type": "number",
-      "unit": "l",
-      "default": 59,
-      "steps": [
-        40,
-        45,
-        50,
-        52,
-        55,
-        57,
-        59,
-        60,
-        63,
-        65,
-        68,
-        70,
-        74,
-        80
-      ]
-    },
-    {
-      "key": "dx",
-      "label": "Dials apart",
-      "type": "number",
-      "unit": "px",
-      "default": 0,
-      "steps": [
-        -80,
-        -60,
-        -40,
-        -20,
-        0,
-        20,
-        40,
-        60,
-        80
-      ]
-    },
-    {
-      "key": "dy",
-      "label": "Dials up / down",
-      "type": "number",
-      "unit": "px",
-      "default": 0,
-      "steps": [
-        -30,
-        -20,
-        -10,
-        0,
-        10,
-        20,
-        30
-      ]
-    },
-    {
-      "key": "needles",
-      "label": "Drawing",
-      "type": "choice",
-      "default": "preload",
-      "reset": 7,
-      "options": [
-        [
-          "preload",
-          "Pre-loaded (default; smoothest, needs cluster-render 0.4.2+)"
-        ],
-        [
-          "rotate",
-          "Rotating layer"
-        ],
-        [
-          "shader",
-          "Shader"
-        ],
-        [
-          "redraw",
-          "Redrawn images"
-        ]
-      ]
-    },
-    {
-      "key": "needleResponse",
-      "label": "Needle response",
-      "type": "choice",
-      "default": "smooth",
-      "options": [
-        [
-          "smooth",
-          "Smooth (one rpm reading behind)"
-        ],
-        [
-          "quick",
-          "Quick (aims one reading ahead)"
-        ]
-      ]
-    },
-    {
       "key": "bottomStrip",
-      "label": "Bottom strip (test; Arc style)",
+      "label": "Bottom strip (test)",
       "type": "choice",
       "default": "covered",
       "options": [
@@ -435,7 +304,8 @@
           "amber",
           "Night Amber"
         ]
-      ]
+      ],
+      "hidden": true
     }
   ],
   "config": {
@@ -474,5 +344,6 @@
         }
       ]
     }
-  }
+  },
+  "credits": false
 }

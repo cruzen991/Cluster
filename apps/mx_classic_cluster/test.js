@@ -294,13 +294,16 @@ for (const st of ['tech']) {
     const spec = require('./app.json');
     const r = spec.settings.find((x) => x.key === 'renderer');
     assert(r && r.default === 'software' && r.hidden && r.reset);
-    assert.strictEqual(spec.settings.find((x) => x.key === 'style').default, 'tech');
-    assert.deepStrictEqual(spec.settings.find((x) => x.key === 'style').options.map((o) => o[0]).sort(), ['arc', 'tech'], 'only the Arc and Tech styles');
     assert(!spec.settings.some((x) => x.key === 'illum'));
     assert(spec.config.dme.iat.length >= 1 && spec.signals['de.bmw.infrastructure.EnvironmentalInformation']._optional);
-    assert.strictEqual(spec.settings.find((x) => x.key === "needles").default, "preload");
-    assert.deepStrictEqual(spec.settings.find((x) => x.key === 'needles').options.map((o) => o[0]), ['preload', 'rotate', 'shader', 'redraw']);
     assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
+    // 0.15.0: Arc only, and these are no longer settings (main.js fixes them); the colour theme hidden; no credit row
+    for (const k of ['style', 'boostRef', 'tank', 'dx', 'dy', 'needles', 'needleResponse', 'needleRate']) assert(!spec.settings.some((x) => x.key === k), k + ' is gone');
+    assert(spec.settings.find((x) => x.key === 'theme').hidden, 'the colour theme kept, not offered');
+    assert.strictEqual(spec.credits, false);
+    const shown = spec.settings.filter((x) => !x.hidden).map((x) => x.key);
+    assert.deepStrictEqual(shown, ['on', 'arcBg', 'notch', 'units', 'tempUnit', 'torqueShow', 'torqueUnit', 'redline', 'sweep', 'shift', 'backdrop', 'bottomStrip', 'retake', 'demo']);
+    assert(spec.settings.every((x) => !/Arc style/.test(x.label)), 'no "Arc style" in a label');
 }
 
 /* the guard: a fake clock, a temporary data folder */
@@ -442,10 +445,6 @@ const PL = require('./preload');
     assert(ag.cv.w <= 2048 && 'PRND'.split('').every((c) => ag.adv[c] > 0));
     const d3 = PL.readoutUniforms(ag, 'D3', 150, 0);
     assert(d3.x[1] - d3.x[0] === Math.round(ag.adv.D) && d3.g[0] === ag.glyphs.indexOf('D'));
-    // the app's settings: pre-loaded is the default
-    const nd = require('./app.json').settings.find((x) => x.key === 'needles');
-    assert.strictEqual(nd.default, 'preload');
-    assert(nd.options.some((x) => x[0] === 'rotate'), 'the rotating layer stays a choice (and the fallback)');
 }
 
 /* needle response: 'quick' aims a reading ahead while the revs move steadily, never past a shift */

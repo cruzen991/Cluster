@@ -222,14 +222,16 @@ def build_ui(spec, language='en'):
                 'Text1stRow': {'value': credit_title, 'type': 'StringId'},
                 'Text2ndRow': {'value': credit_link, 'type': 'StringId'},
             }]))
-        # the project's own credit, last row
-        repo_title, repo_link = sid(app, 'REPO_CREDITS_TITLE'), sid(app, 'REPO_CREDITS_LINK')
-        strings[repo_title] = 'iDrive 7 custom apps'
-        strings[repo_link] = 'GitHub cauliflowermossgrape · github.com/cauliflowermossgrape/idrive7-apps'
-        items.append(comp('tworow', 'REPO_CREDITS', rows=[{
-            'Text1stRow': {'value': repo_title, 'type': 'StringId'},
-            'Text2ndRow': {'value': repo_link, 'type': 'StringId'},
-        }]))
+        # the project's own credit, last row ("credits": false in app.json leaves it out; the kit's licence
+        # file, kit/LICENSE-idrive7-apps, still goes with the source)
+        if spec.get('credits', True):
+            repo_title, repo_link = sid(app, 'REPO_CREDITS_TITLE'), sid(app, 'REPO_CREDITS_LINK')
+            strings[repo_title] = 'iDrive 7 custom apps'
+            strings[repo_link] = 'GitHub cauliflowermossgrape · github.com/cauliflowermossgrape/idrive7-apps'
+            items.append(comp('tworow', 'REPO_CREDITS', rows=[{
+                'Text1stRow': {'value': repo_title, 'type': 'StringId'},
+                'Text2ndRow': {'value': repo_link, 'type': 'StringId'},
+            }]))
 
     for scr in screens:
         cid = nid()

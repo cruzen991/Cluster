@@ -258,6 +258,14 @@ times a second. While driving, each glide now starts where the needle is and las
 time between rpms (x1.15), so the needle never stops waiting for the next one. Measured on the desk: the sweep
 went from 9-15 stops to none (only the planned hold at the top); driving from about 20 stops in 5 s to none.
 
+**Settings cleaned up (0.15.0):** Arc is the only style. No longer settings (a value saved before is ignored):
+Gauge style (Arc), Boost signal (gauge: over the air outside), Fuel tank size (59 l, the M340i's), Dials apart and
+Dials up / down (0), Drawing (pre-loaded, falling back to the rotating layer by itself if the renderer refuses),
+Needle response (smooth). The colour theme of the app's own screen is kept as it was but no longer offered. The
+"iDrive 7 custom apps" credit row is gone from this app's settings (app.json "credits": false, read by
+kit/tools/build.py; other apps keep it; the kit's licence file stays in the repo). The Tech style's drawing code is
+still in the source, unused.
+
 **Boost lower; the needle at 60 a second (0.14.5):** with the torque readout off, boost (label, figures, PSI,
 peak) sits 48 px lower; its figures end at y 308 on the panel, 34 px above BMW's black gear box (y 342-419). With
 torque on, boost stays where it was. The needle update rate setting (0.14.4) is gone: on the car 60 a second was

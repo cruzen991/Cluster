@@ -46,21 +46,23 @@ mgu.run({
             redline: Number(settings.get('redline')) || 7000,
             sweep: settings.get('sweep') !== false,
             backdrop: settings.get('backdrop') === 'none' ? 'none' : 'full',
-            tank: Number(settings.get('tank')) || 59,
-            boostRef: settings.get('boostRef') === 'absolute' ? 'absolute' : 'gauge',
-            dx: Number(settings.get('dx')) || 0,
-            dy: Number(settings.get('dy')) || 0,
+            // 0.15.0: no longer settings (a value saved before is ignored): the M340i's 59 l tank, boost over the
+            // air outside (gauge), the dials where they are, Arc style, pre-loaded drawing, smooth needle
+            tank: 59,
+            boostRef: 'gauge',
+            dx: 0,
+            dy: 0,
             demo: settings.get('demo') === 'on',
             retake: settings.get('retake') === true,
-            style: settings.get('style') === 'arc' ? 'arc' : 'tech',     // 'sport' / 'classic' saved by an older version: tech
+            style: 'arc',
             torqueUnit: settings.get('torqueUnit') === 'nm' ? 'nm' : 'lbft',
             torqueShow: settings.get('torqueShow') === 'on',
-            needleResponse: settings.get('needleResponse') === 'quick' ? 'quick' : 'smooth',
+            needleResponse: 'smooth',
             bottomStrip: ['letter', 'open', 'gear', 'nogear'].indexOf(settings.get('bottomStrip')) >= 0 ? settings.get('bottomStrip') : 'covered',
             notch: settings.get('notch') !== false,
             arcBg: ['graphite', 'dusk', 'twin'].indexOf(settings.get('arcBg')) >= 0 ? settings.get('arcBg') : 'grid',
             shift: settings.get('shift') !== false,
-            needles: ['preload', 'shader', 'rotate', 'redraw'].indexOf(settings.get('needles')) >= 0 ? settings.get('needles') : 'preload',
+            needles: 'preload',                      // falls back to rotating by itself if the renderer refuses (cluster.js)
         });
 
         // fuel: litres in the tank from the cluster's own range / tank status
