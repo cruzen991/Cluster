@@ -53,9 +53,7 @@ const REDRAW_MIN_DEG = 0.5;        // and none for a smaller move
 const MAX_LAYERS = 8;              // cluster-render's per-client limit before 0.4.2
 const MAX_LAYERS_PRE = 64;         // and from 0.4.2 (the pre-loaded mode needs it)
 const SCALE_MIN = 0.003;
-const MOTION_FPS = 60;             // the needle's (and pre-loaded: covers', numerals') places sent this often, by default
-const MOTION_RATES = [60, 30, 20];  // the setting needleRate
-const motionRate = (s) => (s && MOTION_RATES.indexOf(Number(s.needleRate)) >= 0 ? Number(s.needleRate) : MOTION_FPS);
+const MOTION_FPS = 60;             // the needle's (and pre-loaded: covers', numerals') places sent this often
 const MOTION_MIN_DEG = 0.05;       // a move smaller than this is not sent
 const GLIDE_STRETCH = 1.15;        // a live glide lasts this much longer than the time between rpms, so the
                                    // needle is still moving when the next one comes (no stop between glides)
@@ -118,29 +116,19 @@ class ClassicCluster {
 
     /** Starts the needle loop; the cluster itself waits for enable(true). */
     start() {
-        // one loop: the needle's place every frame (the setting needleRate: 60, 30 or 20 a second), the rest
-        // (tick) at most FPS a second, the two in one write to the renderer (_batched), so they reach the
-        // cluster in the same flush. Each frame makes the cluster's own GPU draw every layer again: fewer
-        // a second is less for it to do (KurdBimmer Themes, on a G20, run theirs at 8-20), while the glide
-        // keeps the needle where it should be at each one.
-        this.lastTickAt = Date.now();
-        this._loop(motionRate(this.getSettings()));
-    }
-
-    _loop(rate) {
-        if (this.motionTimer) clearInterval(this.motionTimer);
-        this.motionRate = rate;
+        // one loop: the needle's place every frame (MOTION_FPS), the rest (tick) every other frame, the
+        // two in one write to the renderer (_batched), so they reach the cluster in the same flush.
+        // (0.14.4 offered 30 and 20 a second too; on the car 60 was the smoothest, so it stays at 60.)
+        let last = Date.now();
         this.motionTimer = setInterval(() => {
             const now = Date.now();
             try {
                 this._batched(() => {
-                    if (now - this.lastTickAt >= 1000 / FPS - 4) { this.tick(now - this.lastTickAt, now); this.lastTickAt = now; }
+                    if (now - last >= 1000 / FPS - 4) { this.tick(now - last, now); last = now; }
                     this.motion(now);
                 });
-                const want = motionRate(this.getSettings());
-                if (want !== this.motionRate && this.motionTimer) this._loop(want);          // the setting changed (not once stopped)
             } catch (e) { if (this.opts.onError) this.opts.onError(e); }
-        }, 1000 / rate);
+        }, 1000 / MOTION_FPS);
     }
 
     /** fn's messages to the renderer in one write (cluster_render_client.js batch()). */
@@ -471,13 +459,13 @@ class ClassicCluster {
         });
         this.assetRefs = assets;
         // the torque readout off (setting torqueShow): no layer for it at all
-        const FIELDS = { left: { oil: ['figs96', A.ROW.v1], cool: ['figs96', A.ROW.v2] }, right: Object.assign({ boost: ['figs96', A.ROW.v1] }, s.torqueShow ? { torque: ['figs96', A.ROW.v2] } : {}),
+        const FIELDS = { left: { oil: ['figs96', A.ROW.v1], cool: ['figs96', A.ROW.v2] }, right: Object.assign({ boost: ['figs96', A.boostRow(!!s.torqueShow).v] }, s.torqueShow ? { torque: ['figs96', A.ROW.v2] } : {}),
             centre: { speed: ['figs118', A.CENTRE_SPEED], gear: ['gear', A.CENTRE_GEAR] }, strip: {} };
         this.panels = {};
         for (const key of ['centre', 'left', 'right', 'strip']) {
             const Lk = L[key], z = key === 'centre' ? 31 : 1, kk = Lk.iw ? Lk.w / Lk.iw : 1;
             // a panel with strips (PANEL_BANDS) is sent as a layer per strip: the rest of it is never drawn
-            const bands = PL.PANEL_BANDS[key];
+            const bands = key === 'right' && !s.torqueShow ? PL.PANEL_BANDS.rightLow : PL.PANEL_BANDS[key];
             if (bands) bands.forEach((b, i) => {
                 R[key + '#' + i] = img(Object.assign({ z, x: Lk.x + Math.round(b.x * kk), y: Lk.y + Math.round(b.y * kk), w: Math.round(b.w * kk), h: Math.round(b.h * kk) },
                     kk !== 1 ? { iw: b.w, ih: b.h, sampling: 'bilinear' } : {}));
@@ -1006,4 +994,4 @@ const clamp01 = (x) => (!(x > 0) ? 0 : x > 1 ? 1 : x);     // NaN and -Infinity:
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
-module.exports = { aimRpm, liveGlide, JUMP_MS, motionRate, ClassicCluster, arcTexts, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };
+module.exports = { aimRpm, liveGlide, JUMP_MS, ClassicCluster, arcTexts, layout, tachMax, warmLimit, shiftLevel, TARGET, W, H, MAX_LAYERS };

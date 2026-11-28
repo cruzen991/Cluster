@@ -428,12 +428,24 @@ function drawLeft(p, v) {
 }
 
 /** Boost / torque / odometer. v: { boost, torque (strings), tq ('LB-FT'), odo, peak ('PEAK 19' or '') } */
+/*
+ * With the torque readout off, boost (label, figures, PSI, peak) sits BOOST_DROP lower. BMW's black gear box, when
+ * it shows, is at x 1406-1597, y 342-419 (KurdBimmer Themes' measurement on a G20): x 76-267, y 246-323 in this
+ * panel (at 1330, 96). The figures' area then ends at y 212, 34 above it. With torque on, boost stays where it was.
+ */
+const BOOST_DROP = 48;
+/** Where boost's figures go: their area (the GPU readout's layer) and baseline. */
+function boostRow(torqueOn) {
+    const d = torqueOn ? 0 : BOOST_DROP;
+    return { v: Object.assign({}, ROW.v1, { y: ROW.v1.y + d }), b: ROW.b1 + d, l: ROW.l1 + d, d };
+}
+
 function drawRight(p, v) {
-    const X = 270;
-    p.cell('lbl', { x: 0, y: 0, w: 540, h: 60 }, 'x', (cv) => LBL(cv, X, ROW.l1, 'BOOST'));
-    tabular(p, 'boost', ROW.v1, X, ROW.b1, v.boost, 96, WHITE, 'PSI');
+    const X = 270, B = boostRow(v.torque != null), d = B.d;
+    p.cell('lbl', { x: 0, y: d, w: 540, h: 60 }, 'x', (cv) => LBL(cv, X, B.l, 'BOOST'));
+    tabular(p, 'boost', B.v, X, B.b, v.boost, 96, WHITE, 'PSI');
     // the drive's peak boost, small and dim on the label's line, right of it; nothing until there is one
-    p.cell('peak', { x: 360, y: 26, w: 170, h: 28 }, v.peak || '', (cv) => { if (v.peak) cv.text(v.peak, 372, 46, 16, ORANGE_DIM, { font: 'orbm', literal: true, spacing: 3 }); });
+    p.cell('peak', { x: 360, y: 26 + d, w: 170, h: 28 }, v.peak || '', (cv) => { if (v.peak) cv.text(v.peak, 372, 46 + d, 16, ORANGE_DIM, { font: 'orbm', literal: true, spacing: 3 }); });
     // torque null: its readout is off (setting torqueShow); its place stays empty
     if (v.torque != null) {
         p.cell('lbl2', { x: 0, y: 196, w: 540, h: 40 }, 'x', (cv) => LBL(cv, X, ROW.l2, 'TORQUE'));
@@ -498,7 +510,7 @@ function bigText(cv, str, x, y, size, col) {
 
 module.exports = {
     bigText, needleSprite, gridBackground, graphiteBackground, background, BACKGROUNDS, BG_W, BG_H,
-    NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
+    BOOST_DROP, boostRow, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
     CENTRE_GEAR, CENTRE_SPEED, CENTRE_SPEED_BASE, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,
 };

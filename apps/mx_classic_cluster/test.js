@@ -543,13 +543,24 @@ const PL = require('./preload');
     }
 }
 
-/* the needle update rate */
+/* boost lower with the torque readout off, clear of BMW's black gear box (x 1406-1597, y 342-419) */
 {
-    const { motionRate } = require('./cluster');
-    assert.strictEqual(motionRate({}), 60);
-    assert.strictEqual(motionRate({ needleRate: '30' }), 30);
-    assert.strictEqual(motionRate({ needleRate: 20 }), 20);
-    assert.strictEqual(motionRate({ needleRate: 45 }), 60, 'only the offered rates');
+    const A = require('./arc'), PL = require('./preload');
+    const RX = 1330, RY = 96, box = { x: 1406, y: 342, w: 191, h: 77 };
+    const hit = (r) => RX + r.x < box.x + box.w && box.x < RX + r.x + r.w && RY + r.y < box.y + box.h && box.y < RY + r.y + r.h;
+    const low = A.boostRow(false), was = A.boostRow(true);
+    assert.strictEqual(low.v.y - was.v.y, A.BOOST_DROP, 'moved down');
+    assert(A.BOOST_DROP > 0 && !hit(low.v), 'the figures clear of the box: ' + JSON.stringify(low.v));
+    assert(PL.PANEL_BANDS.rightLow.every((b) => !hit(b)), 'no strip of the panel over the box');
+    assert.deepStrictEqual(was.v, A.ROW.v1, 'with torque on: where it was');
+    // every bit of the panel's ink lies in a strip that is sent
+    const F = require('./faces');
+    const p = new A.Panel(540, 500); p.gpu = { boost: {} };
+    A.drawRight(p, { boost: '12', peak: 'PEAK 18', odo: '41,820 MI', torque: null });
+    const d = p.cv.d, W = 540;
+    let outside = 0;
+    for (let y = 0; y < 500; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 0 && !PL.PANEL_BANDS.rightLow.some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)) outside++;
+    assert.strictEqual(outside, 0, outside + ' inked pixels outside the strips');
 }
 
 /* the renderer client: a batch's messages leave in one write */

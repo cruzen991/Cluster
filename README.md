@@ -258,6 +258,11 @@ times a second. While driving, each glide now starts where the needle is and las
 time between rpms (x1.15), so the needle never stops waiting for the next one. Measured on the desk: the sweep
 went from 9-15 stops to none (only the planned hold at the top); driving from about 20 stops in 5 s to none.
 
+**Boost lower; the needle at 60 a second (0.14.5):** with the torque readout off, boost (label, figures, PSI,
+peak) sits 48 px lower; its figures end at y 308 on the panel, 34 px above BMW's black gear box (y 342-419). With
+torque on, boost stays where it was. The needle update rate setting (0.14.4) is gone: on the car 60 a second was
+the smoothest, so it stays at 60.
+
 **Needle update rate and BMW's gear letter (0.14.4), from KurdBimmer Themes (FDX100/KB, tested on a G20):**
 - *Settings > Needle update rate:* 60 (default, as before), 30 or 20 a second. Every update makes the cluster's own
   GPU draw all our layers again; KurdBimmer found that GPU to be the limit on a G20 (their needles run at 8-20 a

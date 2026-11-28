@@ -197,6 +197,10 @@ const PANEL_BANDS = {
     centre: [{ x: 0, y: 160, w: 300, h: 40 }],
 };
 PANEL_BANDS.right = PANEL_BANDS.left;
+// the right panel with the torque readout off: boost's label line and PSI strip lower by BOOST_DROP (arc.js), no
+// torque strips
+const BOOST_DROP = A.BOOST_DROP;
+PANEL_BANDS.rightLow = [{ x: 0, y: BOOST_DROP, w: 540, h: 60 }, { x: 0, y: 128 + BOOST_DROP, w: 540, h: 40 }, { x: 0, y: 396, w: 540, h: 96 }];
 
 /**
  * A glyph atlas: cells side by side, the glyphs' coverage. Drawn white in a canvas (cv), sent as one

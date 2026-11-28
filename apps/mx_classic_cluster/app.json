@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "Classic Cluster",
   "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
-  "version": "0.14.4",
+  "version": "0.14.5",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -346,26 +346,6 @@
         [
           "quick",
           "Quick (aims one reading ahead)"
-        ]
-      ]
-    },
-    {
-      "key": "needleRate",
-      "label": "Needle update rate (fewer a second: less work for the cluster's graphics)",
-      "type": "choice",
-      "default": "60",
-      "options": [
-        [
-          "60",
-          "60 a second"
-        ],
-        [
-          "30",
-          "30 a second"
-        ],
-        [
-          "20",
-          "20 a second"
         ]
       ]
     },

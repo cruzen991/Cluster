@@ -56,7 +56,6 @@ mgu.run({
             torqueUnit: settings.get('torqueUnit') === 'nm' ? 'nm' : 'lbft',
             torqueShow: settings.get('torqueShow') === 'on',
             needleResponse: settings.get('needleResponse') === 'quick' ? 'quick' : 'smooth',
-            needleRate: Number(settings.get('needleRate')) || 60,
             bottomStrip: ['letter', 'open', 'gear', 'nogear'].indexOf(settings.get('bottomStrip')) >= 0 ? settings.get('bottomStrip') : 'covered',
             notch: settings.get('notch') !== false,
             arcBg: ['graphite', 'dusk', 'twin'].indexOf(settings.get('arcBg')) >= 0 ? settings.get('arcBg') : 'grid',
