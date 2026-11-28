@@ -124,7 +124,7 @@ function arcFace(opts) {
     // the track the lit arc runs in, and the disc under the gear
     cv.arc(DCX, DCY, R_PROG - W_PROG / 2, R_PROG + W_PROG / 2, A0, A1, '#1c1e22');
     cv.arc(DCX, DCY, 0, R_INNER, 0, 360, '#090a0c');
-    cv.text('x1000 RPM', DCX + 150, DCY + 186, 18, DIM, { font: 'orbm', align: 'center', literal: true });
+    // (0.15.7: no "x1000 RPM" label)
     return cv;
 }
 
@@ -435,7 +435,7 @@ function drawRight(p, v) {
 function drawStrip(p, v) {
     // 0.12.0: smaller (20 px, was 26) and the drive mode's cell wider (360 px), so "SPORT PLUS" fits;
     // a mode name that still wouldn't is drawn smaller rather than cut
-    p.cell('rule', { x: 0, y: 0, w: 800, h: 6 }, 'x', (cv) => cv.fillRect(0, 2, 800, 2, FAINT));
+    // (0.15.7: no grey rule above the row)
     p.cell('out', { x: 0, y: 8, w: 220, h: 44 }, v.outside, (cv) => cv.text(v.outside, 110, 38, 20, WHITE, { font: 'orb', align: 'center', literal: true }));
     p.cell('mode', { x: 220, y: 8, w: 360, h: 44 }, v.mode, (cv) => {
         let size = 20;
