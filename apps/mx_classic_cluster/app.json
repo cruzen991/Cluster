@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "ARC Cluster",
   "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "priority": "PRIO_MEDIUM",
   "backgroundPriority": 150,
   "vendor": "custom",

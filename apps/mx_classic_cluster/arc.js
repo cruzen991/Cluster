@@ -220,7 +220,7 @@ function faceWith(base, nums, levels) {
  */
 const THEMES = {
     red: { core: NEEDLE_RED, fill: [200, 20, 20], edge: [255, 150, 140], hi: [255, 170, 170], text: [255, 64, 52] },
-    orange: { core: [255, 128, 20], fill: [212, 88, 8], edge: [255, 202, 140], hi: [255, 216, 170], text: ORANGE },
+    orange: { core: [232, 92, 8], fill: [168, 58, 4], edge: [255, 172, 110], hi: [255, 188, 136], text: [236, 98, 16] },   // 0.17.1: darker
     blue: { core: [38, 140, 255], fill: [18, 78, 212], edge: [150, 200, 255], hi: [176, 214, 255], text: [74, 156, 255] },
 };
 /** The theme for a drive mode's name ('Eco Pro', 'Comfort Plus', ...). */
