@@ -813,12 +813,13 @@ function preloadDrive(done) {
     assert.strictEqual(JSON.parse(/cc-segbar (\{.*\})/.exec(fs)[1]).n, S.n);
     // the uniform: whole segments, clamped; no peak below 1 psi
     assert.deepStrictEqual(A.boostBarU(null, 0), [0, -1]);
-    assert.deepStrictEqual(A.boostBarU(10, 0), [0.5, -1]);
+    assert.deepStrictEqual(A.boostBarU(10, 0), [0.4, -1]);
     assert.deepStrictEqual(A.boostBarU(40, 30), [1, 1]);
-    assert.deepStrictEqual(A.boostBarU(-3, 15), [0, 0.75]);
+    assert.deepStrictEqual(A.boostBarU(-3, 15), [0, 0.6]);
+    assert.strictEqual(B.max, 25, 'the scale to 25 psi');
     // lit segments: count the lit ones along the bar's middle row
     const lit = (u) => { let n = 0, was = false; for (let x = 0; x < S.w; x++) { const c = PL.segbarShade(S, u, x + 0.5, S.by + S.bh / 2); const on = c[3] > 128 && c[0] > 200; if (on && !was) n++; was = on; } return n; };
-    assert.strictEqual(lit([0, -1]), 0); assert.strictEqual(lit([0.5, -1]), S.n / 2); assert.strictEqual(lit([1, -1]), S.n);
+    assert.strictEqual(lit([0, -1]), 0); assert.strictEqual(lit([10 / 25, -1]), 10); assert.strictEqual(lit([1, -1]), S.n);
     // segments: n of them, each with dark gaps between
     let segs = 0, was = false;
     for (let x = 0; x < S.w; x++) { const on = PL.segbarShade(S, [1, -1], x + 0.5, S.by + S.bh / 2)[3] > 128; if (on && !was) segs++; was = on; }
@@ -837,7 +838,7 @@ function preloadDrive(done) {
         let outside = 0;
         for (let y = 0; y < 500; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 0 && !bands.some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)) outside++;
         assert.strictEqual(outside, 0, outside + ' inked pixels outside the strips (gpu ' + gpu + ')');
-        if (gpu) assert.deepStrictEqual(p.gpu.boostBar.u, [14 / 24, 0.9]);
+        if (gpu) assert.deepStrictEqual(p.gpu.boostBar.u, [12 / 25, 0.72]);
         else assert(d[((B.q.y + S.by + 7) * W + B.q.x + S.x0 + 3) * 4 + 3] > 0, 'the bar drawn without the GPU');
     }
     // the texts: the bar's values only with the setting
@@ -884,7 +885,7 @@ function barDrive(done) {
         for (let b = 0; b <= 16; b += 2) feed(b);
         const us = sent.slice(n0).filter((m) => m.op === 'uniform' && m.ref === bar).map((m) => m.v);
         assert(us.length >= 5, us.length + ' bar uniforms');
-        assert.strictEqual(us[us.length - 1][0], Math.round(16 / 20 * 24) / 24, 'lit to 16 psi');
+        assert.strictEqual(us[us.length - 1][0], 16 / 25, 'lit to 16 psi');
         assert(us[us.length - 1][1] > 0, 'the peak marker shown');
         const px = sent.slice(n0).filter((m) => m.op === 'pixels' && Object.keys(cl.refs).some((k) => /^right/.test(k) && cl.refs[k] === m.ref));
         const bytes = px.reduce((a, m) => a + m.bytes, 0);

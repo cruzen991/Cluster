@@ -15,7 +15,7 @@ tachometer in the middle, the speed and gear inside it, and big readouts either 
   number alone while shifting by hand.
 - **Left:** oil and coolant temperature, a fuel bar and the range.
 - **Right:** boost, with the drive's peak beside its label, and the odometer. Optionally boost as
-  [a number and a segmented bar](docs/arc-boost-bar.png) (0-20 psi, red from 17, the peak an orange marker over it).
+  [a number and a segmented bar](docs/arc-boost-bar.png) (0-25 psi, a segment a psi, red from 21, the peak an orange marker over it).
 - **Bottom row:** outside temperature, drive mode and intake air temperature.
 - **Backgrounds:** Dusk (above, the default), [Dusk from the top](docs/arc-dusk-top.png) (the red coming down from
   the top, pure black along the bottom so BMW's seat-belt light and gear letter show without black boxes round

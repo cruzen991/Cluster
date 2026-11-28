@@ -430,14 +430,14 @@ function boostRow(torqueOn) {
 
 /*
  * Boost as a bar (setting boostStyle 'bar', 0.16.0): the label on the left, the figures and PSI on the right of one
- * line, under them a bar of n slanted segments over 0-max psi (red from spec.hot), the drive's peak an orange marker
+ * line, under them a bar of n slanted segments over 0-max psi (red from spec.hot: 21 psi), the drive's peak an orange marker
  * over it, the scale's ends and "PEAK n" under it. All of it above y 200 of the panel, clear of BMW's gear box (y 246
  * on). Panel pixels; the bar's layer is q, spec what its shader (preload.js segbarShader) draws in that layer.
  */
 const BOOST_BAR = (() => {
-    const x0 = 70, x1 = 500, n = 24, max = 20;
+    const x0 = 70, x1 = 500, n = 25, max = 25;    // 0.16.1: to 25 psi, a segment a psi
     const q = { x: x0 - 8, y: 124, w: x1 - x0 + 16, h: 40 };
-    const spec = { w: q.w, h: q.h, x0: 8, bw: x1 - x0, by: 22, bh: 14, n, gap: 4, skew: 4 / 14, hot: 0.85, mk: 14, mh: 12,
+    const spec = { w: q.w, h: q.h, x0: 8, bw: x1 - x0, by: 22, bh: 14, n, gap: 4, skew: 4 / 14, hot: 0.84, mk: 14, mh: 12,
         on: [245, 246, 248], off: [44, 46, 52], red: [238, 60, 50], redOff: [92, 24, 22], mark: ORANGE };
     return { x0, x1, n, max, q, spec, lblBase: 118, base: 124, val: { x: 220, y: 66, w: 240, h: 62 }, size: 60, scaleBase: 186,
         band: { y: 90, h: 106 } };
