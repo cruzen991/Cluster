@@ -62,9 +62,8 @@ const NOTCH_SCALE = 1.04, NOTCH_CY = 466;  // 0.12.1: from the car's photo, the 
  */
 const STRIP_TOP = 658, GEAR_WINDOW = [1196, 1424], OPEN_SCALE = 0.96, OPEN_CY = 439;
 /*
- * Mode 'letter': only BMW's gear letter left uncovered, LETTER_WINDOW x LETTER_TOP-720 (80 x 60). KurdBimmer Themes
- * (FDX100/KB, tested on a G20; shared/visible.js, hud.js GEAR_WIN) found BMW draws its black gear box (x 1406-1597,
- * y 342-419: over our torque) only while a layout covers that letter, and leaves this window free in every theme.
+ * Mode 'letter': only BMW's gear letter left uncovered, LETTER_WINDOW x LETTER_TOP-720 (80 x 60). On a G20 BMW draws
+ * its black gear box (x 1406-1597, y 342-419) only while a layout covers that letter.
  * Nothing of ours is near it (the tach ends x ~1340, our bottom row x 1360), so the layout stays as it is: only
  * the background is cut at LETTER_TOP and the strip beside the window covered with the background's own bottom.
  */
@@ -406,7 +405,7 @@ function drawLeft(p, v) {
 /** Boost / torque / odometer. v: { boost, torque (strings), tq ('LB-FT'), odo, peak ('PEAK 19' or '') } */
 /*
  * With the torque readout off, boost (label, figures, PSI, peak) sits BOOST_DROP lower. BMW's black gear box, when
- * it shows, is at x 1406-1597, y 342-419 (KurdBimmer Themes' measurement on a G20): x 76-267, y 246-323 in this
+ * it shows, is at x 1406-1597, y 342-419 (measured on a G20): x 76-267, y 246-323 in this
  * panel (at 1330, 96). The figures' area then ends at y 212, 34 above it. With torque on, boost stays where it was.
  */
 const BOOST_DROP = 48;

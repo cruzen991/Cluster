@@ -129,7 +129,7 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`).
   only when memory has grown (the kit used to force one every 1.5 s while the app's screen was open). The app's
   screen shows how many needle frames ran late (over 25 ms) in the last minute and the longest gap.
 - **BMW's black box:** on a G20 the cluster draws a black box at x 1406-1597, y 342-419 while a layout covers BMW's
-  gear letter in the bottom strip (found by [KurdBimmer Themes](https://github.com/FDX100/KB)). Nothing important is
+  gear letter in the bottom strip. Nothing important is
   drawn there: boost sits above it. *Bottom strip → Open over BMW's gear letter only* leaves that 80x60 letter
   uncovered (x 1380-1460, y 660-720), which should stop the box altogether; the other test modes open more of
   the strip.
@@ -160,6 +160,5 @@ then `node kit/tools/preview.js dist/mx_classic_cluster preview wait=8 render`.
 
 The app's own files: MIT (`LICENSE`). Orbitron (`kit/runtime/fonts/orb*.json`): SIL Open Font License 1.1, The
 Orbitron Project Authors. `cluster_render_client.js`: MPL-2.0 (Robert Nisipeanu). `kit/`: MIT (cauliflowermossgrape,
-`kit/LICENSE-idrive7-apps`). Findings used from [KurdBimmer Themes](https://github.com/FDX100/KB) (BMW's black box
-and gear letter on a G20), Cluster Layouts and the author of waze-on-cluster (pre-load everything, stream only
-video). Not affiliated with or endorsed by BMW AG.
+`kit/LICENSE-idrive7-apps`). Findings used from Cluster Layouts and the author of waze-on-cluster (pre-load
+everything, stream only video). Not affiliated with or endorsed by BMW AG.
