@@ -432,9 +432,11 @@ def build(app_id, language='en', preview_only=False):
         'engines': {'node': '>=8.7.0'},
         'oapAppSettings': {
             'maxDiskUsage': spec.get('maxDiskUsage', 20971520), 'cpuLimit': spec.get('cpuLimit', 60),
-            'memoryThresholdKB': spec.get('memoryKB', 196608), 'priority': 'PRIO_LOW',
+            # priority: an app may ask for more ("priority", "backgroundPriority" in app.json), as robertn's
+            # Waze-on-cluster runs (PRIO_MEDIUM, 150): an app drawing the cluster every frame should not wait
+            'memoryThresholdKB': spec.get('memoryKB', 196608), 'priority': spec.get('priority', 'PRIO_LOW'),
             'visibility': 'FOREGROUND', 'latencyClass': 'FOREGROUND', 'loggingId': spec['loggingId'],
-            'userLoginRequired': False, 'backgroundPriority': 200, 'someipManifest': 'manifest.json',
+            'userLoginRequired': False, 'backgroundPriority': spec.get('backgroundPriority', 200), 'someipManifest': 'manifest.json',
         },
     }
     json.dump(pkg, open(os.path.join(src, 'package.json'), 'w', encoding='utf-8', newline='\n'), indent=2)

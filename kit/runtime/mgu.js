@@ -33,6 +33,22 @@ const SPEC = JSON.parse(fs.readFileSync(path.join(__dirname, 'app-spec.json'), '
 // cwd of an OAP app is oap_<uid>/data; source is oap_<uid>/source
 const APP_ROOT = path.resolve(__dirname, '..', '..', '..');
 const DATA_DIR = fs.existsSync(path.join(APP_ROOT, 'data')) ? path.join(APP_ROOT, 'data') : process.cwd();
+/*
+ * A full collection (global.gc, when Node has it) pauses everything in the app for its length: on the head unit
+ * tens of ms, a hitch in anything the app animates (a needle on the cluster). The screen loops used to force one
+ * every third frame (every 1.5 s at 2 fps); now only when the memory has grown (GC_GROWTH since the last one, at
+ * most every GC_MIN_MS), or at once past GC_HIGH of the platform's limit, so memory is still kept down.
+ */
+const GC_MIN_MS = 10000, GC_GROWTH = 8 * 1048576, GC_HIGH = 0.6 * (SPEC.memoryKB || 196608) * 1024;   // memoryKB: build.py's limit
+let gcAt = 0, gcRss = 0;
+function gcMaybe() {
+    if (typeof global.gc !== 'function') return;
+    const now = Date.now(), rss = process.memoryUsage().rss;
+    const due = (now - gcAt >= GC_MIN_MS && rss >= gcRss + GC_GROWTH) || (rss > GC_HIGH && now - gcAt >= 2000);
+    if (!due) return;
+    try { global.gc(); } catch (e) { /* ignore */ }
+    gcAt = now; gcRss = process.memoryUsage().rss;
+}
 const RHMI_RES = path.join(APP_ROOT, 'rhmiData', 'resources');
 
 /* ---------------- logging: SDK logger (DLT) + small rotating file ---------------- */
@@ -432,7 +448,7 @@ class Widget {
                 for (const i of list) {
                     try { const cv = await draw(i); if (cv) this.image(i.spawnId, cv); } catch (e) { log.error('widget draw', e); }
                 }
-                if (++frames % 3 === 0 && typeof global.gc === 'function') { try { global.gc(); } catch (e) { /* ignore */ } }
+                ++frames; gcMaybe();
                 if (frames % 200 === 0) {
                     log.info('widget loop: png ' + Math.round(this.timing.png / 200) + ' ms, hmi ' + Math.round(this.timing.push / 200) + ' ms per frame');
                     this.timing.png = 0; this.timing.push = 0;
@@ -598,7 +614,7 @@ async function runInner(impl) {
                 frames++; spent += dt;
                 // software frames allocate image and PNG buffers; Node 8 frees them lazily, which lets
                 // memory float up to the platform's limit (the app is then killed). Collect regularly.
-                if (!gpuOn() && frames % 3 === 0 && typeof global.gc === 'function') { try { global.gc(); } catch (e) { /* ignore */ } }
+                if (!gpuOn()) gcMaybe();
                 if (frames % (gpuOn() ? 600 : 100) === 0) {
                     const n = gpuOn() ? 600 : 100, tm = ui.timing, png = Math.round(tm.png / n), push = Math.round(tm.push / n), all = (spent / n).toFixed(1);
                     log.info('loop ' + stateName + ': ' + all + ' ms per frame in JS' + (gpuOn() ? ' (GPU renderer)' : ' (draw ' + Math.max(0, all - png - push) + ', png ' + png + ', hmi ' + push + '; asked for ' + fps + ' fps)'));
@@ -730,4 +746,4 @@ async function runInner(impl) {
     return ctx;
 }
 
-module.exports = { run, log, Settings, SPEC };
+module.exports = { run, log, Settings, SPEC, gcMaybe };

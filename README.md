@@ -121,7 +121,13 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`).
   write, so they reach the cluster in the same flush (30 and 20 a second were tried on the car; 60 was smoothest).
 - **Following the revs:** the car sends a new rpm about 9 times a second. The needle starts gliding to each reading
   the moment it arrives, over the time to the next one, so it moves continuously but about one reading behind the
-  engine. A jump of 800 rpm or more in one reading (a shift, a blip) is shown in 50 ms instead.
+  engine. A jump of 800 rpm or more in one reading (a shift, a blip) is shown in 50 ms instead. Smoother paths
+  through the readings (speed-matched curves, a short playback delay) were simulated against the car's irregular
+  timing; none was better in every case without the needle swinging past the revs, so this one stays.
+- **Not waiting on the head unit:** the app runs at the priority robertn's Waze-on-cluster uses (PRIO_MEDIUM,
+  background 150; the kit's default is PRIO_LOW, 200), and a full memory collection, which pauses the app, runs
+  only when memory has grown (the kit used to force one every 1.5 s while the app's screen was open). The app's
+  screen shows how many needle frames ran late (over 25 ms) in the last minute and the longest gap.
 - **BMW's black box:** on a G20 the cluster draws a black box at x 1406-1597, y 342-419 while a layout covers BMW's
   gear letter in the bottom strip (found by [KurdBimmer Themes](https://github.com/FDX100/KB)). Nothing important is
   drawn there: boost sits above it. *Bottom strip → Open over BMW's gear letter only* leaves that 80x60 letter

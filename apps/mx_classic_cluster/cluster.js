@@ -54,6 +54,7 @@ const MAX_LAYERS = 8;              // cluster-render's per-client limit before 0
 const MAX_LAYERS_PRE = 64;         // and from 0.4.2 (the pre-loaded mode needs it)
 const SCALE_MIN = 0.003;
 const MOTION_FPS = 60;             // the needle's (and pre-loaded: covers', numerals') places sent this often
+const LATE_MS = 25;                // a needle frame this long after the last is late (one or more frames lost)
 const MOTION_MIN_DEG = 0.05;       // a move smaller than this is not sent
 const GLIDE_STRETCH = 1.15;        // a live glide lasts this much longer than the time between rpms, so the
                                    // needle is still moving when the next one comes (no stop between glides)
@@ -120,8 +121,10 @@ class ClassicCluster {
         // two in one write to the renderer (_batched), so they reach the cluster in the same flush.
         // (0.14.4 offered 30 and 20 a second too; on the car 60 was the smoothest, so it stays at 60.)
         let last = Date.now();
+        this.frameGaps = { since: Date.now(), late: 0, max: 0, shown: null };
         this.motionTimer = setInterval(() => {
             const now = Date.now();
+            this._frameGap(now);
             try {
                 this._batched(() => {
                     if (now - last >= 1000 / FPS - 4) { this.tick(now - last, now); last = now; }
@@ -129,6 +132,19 @@ class ClassicCluster {
                 });
             } catch (e) { if (this.opts.onError) this.opts.onError(e); }
         }, 1000 / MOTION_FPS);
+    }
+
+    /**
+     * How late the needle's frames run, while the cluster is drawn (for the app's screen): a frame more than
+     * LATE_MS after the one before is late (the head unit busy, a collection); counted a minute at a time.
+     */
+    _frameGap(now) {
+        const g = this.frameGaps, gap = g.prev ? now - g.prev : 0;
+        g.prev = now;
+        if (!this.enabled || !this.dials || this.state.target !== 'shown') return;
+        if (gap > LATE_MS) g.late++;
+        if (gap > g.max) g.max = gap;
+        if (now - g.since >= 60000) { g.shown = { late: g.late, max: g.max }; g.late = 0; g.max = 0; g.since = now; }
     }
 
     /** fn's messages to the renderer in one write (cluster_render_client.js batch()). */
@@ -883,7 +899,8 @@ class ClassicCluster {
         const shown = Object.keys(st.layers).filter((k) => st.layers[k] === 'shown').length;
         return { target: st.target, reason: st.reason, shown, budget: st.budget, backend: this.cr ? this.cr.backend : '',
             groups, mode: this.mode, sends: this.sends || 0, sweeping: !!this.sweep, layers: this.layerCount || 0,
-            refused: st.refused || 0, lastRefused: st.lastRefused || '', preloadOff: this.preloadOff || '' };
+            refused: st.refused || 0, lastRefused: st.lastRefused || '', preloadOff: this.preloadOff || '',
+            frames: this.frameGaps ? (this.frameGaps.shown || { late: this.frameGaps.late, max: this.frameGaps.max, partial: true }) : null };
     }
 }
 

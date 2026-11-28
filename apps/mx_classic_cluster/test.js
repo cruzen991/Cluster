@@ -555,6 +555,20 @@ const PL = require('./preload');
     assert.strictEqual(outside, 0, outside + ' inked pixels outside the strips');
 }
 
+/* late needle frames counted for the app's screen, only while the cluster is drawn */
+{
+    const C = require('./cluster');
+    const cl = new C.ClassicCluster({ log: { info() {}, warn() {} }, settings: () => ({}), app: 't' });
+    cl.enabled = true; cl.dials = { tach: {} }; cl.state = { target: 'shown', reason: '', layers: {}, why: {}, budget: '' };
+    cl.frameGaps = { since: 0, late: 0, max: 0, shown: null };
+    let t = 0;
+    for (let k = 0; k < 4000; k++) { t += k % 500 === 0 ? 70 : 16.7; cl._frameGap(Math.round(t)); }
+    assert.deepStrictEqual(cl.status().frames, { late: 7, max: 70 }, 'a 70 ms hitch every ~8 s: 7 in the minute');
+    cl.state.target = 'idle'; const before = cl.frameGaps.late; cl._frameGap(t + 500);
+    assert.strictEqual(cl.frameGaps.late, before, 'not counted while the cluster is not drawn');
+    assert.strictEqual(require('./app.json').priority, 'PRIO_MEDIUM');
+}
+
 /* the renderer client: a batch's messages leave in one write */
 {
     const CR = require('./cluster_render_client');
