@@ -397,7 +397,7 @@ class ClassicCluster {
     /** The readouts' glyph atlases (the same for every setting). */
     preAtlases(art) {
         if (art.atlases) return;
-        art.atlases = { figs96: PL.atlas('tabular', 96, A.ROW.v1.h, A.ROW.b1 - A.ROW.v1.y), figs118: PL.atlas('tabular', 118, A.CENTRE_SPEED.h, A.CENTRE_SPEED_BASE - A.CENTRE_SPEED.y),
+        art.atlases = { figs96: PL.atlas('tabular', 96, A.ROW.v1.h, A.ROW.b1 - A.ROW.v1.y), temps: PL.atlas('tabular', A.TEMP_FIG, A.ROW.v1.h, A.ROW.b1 - A.ROW.v1.y), figs118: PL.atlas('tabular', 118, A.CENTRE_SPEED.h, A.CENTRE_SPEED_BASE - A.CENTRE_SPEED.y),
             gear: PL.atlas('gear', A.CENTRE_GEAR_SIZE, A.CENTRE_GEAR.h, A.CENTRE_GEAR_BASE - A.CENTRE_GEAR.y) };
     }
 
@@ -459,7 +459,7 @@ class ClassicCluster {
         });
         this.assetRefs = assets;
         // the torque readout off (setting torqueShow): no layer for it at all
-        const FIELDS = { left: { oil: ['figs96', A.ROW.v1], cool: ['figs96', A.ROW.v2] }, right: Object.assign({ boost: ['figs96', A.boostRow(!!s.torqueShow).v] }, s.torqueShow ? { torque: ['figs96', A.ROW.v2] } : {}),
+        const FIELDS = { left: { oil: ['temps', A.ROW.v1], cool: ['temps', A.ROW.v2] }, right: Object.assign({ boost: ['figs96', A.boostRow(!!s.torqueShow).v] }, s.torqueShow ? { torque: ['figs96', A.ROW.v2] } : {}),
             centre: { speed: ['figs118', A.CENTRE_SPEED], gear: ['gear', A.CENTRE_GEAR] }, strip: {} };
         this.panels = {};
         for (const key of ['centre', 'left', 'right', 'strip']) {

@@ -678,7 +678,7 @@ function preloadDrive(done) {
     setTimeout(() => {
         const made = sent.filter((m) => ['image', 'effect'].includes(m.op));
         assert(made.length > 8 && made.length <= 64, made.length + ' layers');
-        assert.strictEqual(sent.filter((m) => m.op === 'asset').length, 3);
+        assert.strictEqual(sent.filter((m) => m.op === 'asset').length, 4, 'atlases: 96 px, 77 px (oil, coolant), the speed, the gear');
         // within cluster-render's 16 MB with room for other apps on it: it counts every
         // picture twice (its pixels and a scratch copy), an r8 asset at a byte a pixel
         const mem = sent.filter((m) => m.op === 'image' || m.op === 'asset').reduce((a, m) => a + (m.o.iw || m.o.w) * (m.o.ih || m.o.h) * (m.o.format === 'r8' ? 1 : 4) * 2, 0);

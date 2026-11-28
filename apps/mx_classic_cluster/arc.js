@@ -382,12 +382,15 @@ const ROW = { l1: 46, v1: { x: 60, y: 80, w: 420, h: 84 }, b1: 156, l2: 226, v2:
     bar: { x: 140, y: 410, w: 260 }, foot: { x: 0, y: 436, w: 540, h: 56 }, fb: 476 };
 
 /** Oil / coolant / fuel / range. v: { oil, cool (strings), oilWarn, coolWarn, tu ('°F'), fuel (0..1|null), range } */
+/* oil and coolant figures: 20 % smaller than boost's 96 (0.15.4), on the same baselines */
+const TEMP_FIG = 77;
+
 function drawLeft(p, v) {
     const X = 270;
     p.cell('lbl', { x: 0, y: 0, w: 540, h: 60 }, 'x', (cv) => LBL(cv, X, ROW.l1, 'OIL'));
-    tabular(p, 'oil', ROW.v1, X, ROW.b1, v.oil, 96, v.oilWarn ? ORANGE : WHITE, v.tu);
+    tabular(p, 'oil', ROW.v1, X, ROW.b1, v.oil, TEMP_FIG, v.oilWarn ? ORANGE : WHITE, v.tu);
     p.cell('lbl2', { x: 0, y: 196, w: 540, h: 40 }, 'x', (cv) => LBL(cv, X, ROW.l2, 'COOLANT'));
-    tabular(p, 'cool', ROW.v2, X, ROW.b2, v.cool, 96, v.coolWarn ? ORANGE : WHITE, v.tu);
+    tabular(p, 'cool', ROW.v2, X, ROW.b2, v.cool, TEMP_FIG, v.coolWarn ? ORANGE : WHITE, v.tu);
     const fb = v.fuel == null ? -1 : Math.round(Math.max(0, Math.min(1, v.fuel)) * 40);
     p.cell('bar', { x: 90, y: ROW.bar.y - 8, w: 360, h: 26 }, String(fb), (cv) => {
         const b = ROW.bar;
@@ -483,7 +486,7 @@ function bigText(cv, str, x, y, size, col) {
 
 module.exports = {
     bigText, needleSprite, gridBackground, duskBackground, background, BACKGROUNDS, BG_W, BG_H,
-    BOOST_DROP, boostRow, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
+    BOOST_DROP, boostRow, TEMP_FIG, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
     CENTRE_GEAR, CENTRE_SPEED, CENTRE_SPEED_BASE, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,
 };
