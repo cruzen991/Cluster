@@ -913,4 +913,77 @@ function barDrive(done) {
     }, 200);
 }
 
-preloadDrive(() => barDrive(() => console.log('arc cluster self-check ok')));
+/* drive-mode colours: which mode is which colour; the needle and lit arc pictures in that colour */
+{
+    const A = require('./arc'), PL = require('./preload');
+    const cases = { 'Sport': 'red', 'Sport Plus': 'red', 'Sport Individual': 'red', 'Comfort': 'orange', 'Comfort Plus': 'orange', 'Comfort Individual': 'orange',
+        'Eco Pro': 'blue', 'Eco Pro Plus': 'blue', 'Eco Pro Individual': 'blue', 'Adaptive': 'red', '': 'red', null: 'red' };
+    Object.entries(cases).forEach(([m, t]) => assert.strictEqual(A.themeOf(m === 'null' ? null : m), t, m));
+    // the lit arc in the theme's colour; the default still the needle's red
+    const lit = (col) => { const c = PL.litPiece(2, col).cv; let best = null; for (let i = 0; i < c.d.length; i += 4) if (c.d[i + 3] === 255) { best = [c.d[i], c.d[i + 1], c.d[i + 2]]; break; } return best; };
+    assert.deepStrictEqual(lit(), A.NEEDLE_RED);
+    assert.deepStrictEqual(lit(A.THEMES.blue.core), A.THEMES.blue.core);
+    // the needle: same size in every colour (its layer stays), blue-dominant in blue, red in red
+    const o = { redline: 7000, max: 8000 };
+    const nr = A.needleSprite(o), nb = A.needleSprite(Object.assign({}, o, { theme: 'blue' })), no = A.needleSprite(Object.assign({}, o, { theme: 'orange' }));
+    assert(nr.w === nb.w && nr.h === nb.h && nr.w === no.w, 'same size');
+    const sum = (n) => { const t = [0, 0, 0]; for (let i = 0; i < n.cv.d.length; i += 4) for (let k = 0; k < 3; k++) t[k] += n.cv.d[i + k] * n.cv.d[i + 3] / 255; return t; };
+    const r = sum(nr), b = sum(nb), og = sum(no);
+    assert(r[0] > r[2] * 3 && b[2] > b[0] * 1.5 && og[1] > og[2] * 2 && og[0] > og[1], 'colours ' + [r, b, og].map((x) => x.map(Math.round)).join(' / '));
+    // the mode's name in the bottom row in its colour
+    const p = new A.Panel(800, 60);
+    A.drawStrip(p, { outside: '64°F', mode: 'ECO PRO', theme: 'blue', intake: '95°F' });
+    let blue = 0; for (let i = 0; i < p.cv.d.length; i += 4) if (p.cv.d[i + 3] > 200 && p.cv.d[i + 2] > 200 && p.cv.d[i] < 120) blue++;
+    assert(blue > 50, 'ECO PRO in blue');
+}
+
+/* the cluster pre-loaded: a mode change sends the needle and lit arc again, once, in its colour; nothing else */
+function themeDrive(done) {
+    const C = require('./cluster'), A = require('./arc');
+    const sent = [], layers = new Map();
+    let next = 1;
+    const add = (kind) => (o) => { const ref = next++; layers.set(ref, { kind, opts: o }); sent.push({ op: kind, ref, o }); return ref; };
+    const fake = {
+        layers, image: add('image'), effect: add('effect'), asset: add('asset'),
+        pixels(ref, rects, px) { sent.push({ op: 'pixels', ref, bytes: px.length, px }); return true; },
+        set(ref, o) { sent.push({ op: 'set', ref, o }); }, uniform(ref, name, v) { sent.push({ op: 'uniform', ref, name, v }); },
+        bind(ref, s, a) { sent.push({ op: 'bind', ref, s, a }); }, drop(ref) { sent.push({ op: 'drop', ref }); layers.delete(ref); },
+        animate() { return 0; }, _send(m) { sent.push({ op: m.op, ref: m.ref, o: m }); },
+    };
+    const s = { on: true, style: 'arc', torqueUnit: 'lbft', torqueShow: false, shift: true, units: 'mph', tempUnit: 'f', redline: 7000, sweep: false, backdrop: 'full',
+        tank: 59, dx: 0, dy: 0, needles: 'preload', retake: false, notch: true, arcBg: 'dusk', boostStyle: 'number' };
+    const cl = new C.ClassicCluster({ log: { info() {}, warn() {} }, settings: () => s, app: 'test' });
+    cl.cr = fake; cl.enabled = true; cl.state = { target: 'shown', reason: '', layers: {}, why: {}, budget: '' };
+    cl.build();
+    setTimeout(() => {
+        let t = Date.now(), seq = 0;
+        const feed = (mode) => {
+            cl.update({ speed: 50, rpm: 3000, fuel: 0.5, oil: 0.5, oilC: 95, coolC: 90, boost: 0.5, boostPsi: 5, torqueNm: 200, iatC: 30, outsideC: 15,
+                speedText: '50', gearText: 'D3', rangeText: '200 mi', odoText: '1 mi', modeText: mode, live: true, rpmSeq: ++seq, rpmEvery: 50 });
+            t += 300; cl.tick(50, t);
+        };
+        const moving = [cl.refs.needle].concat(Object.keys(cl.refs).filter((k) => /^lit\d/.test(k)).map((k) => cl.refs[k]));
+        const pxOf = (from) => sent.slice(from).filter((m) => m.op === 'pixels' && moving.includes(m.ref));
+        let n0 = sent.length;
+        for (let i = 0; i < 4; i++) feed('Sport Plus');
+        assert.strictEqual(pxOf(n0).length, 0, 'Sport: the red it was made in, nothing sent');
+        n0 = sent.length;
+        for (let i = 0; i < 4; i++) feed('Eco Pro');
+        const eco = pxOf(n0);
+        assert.strictEqual(eco.length, moving.length, 'each of the needle and lit pieces sent once: ' + eco.length + ' of ' + moving.length);
+        const bytes = eco.reduce((a, m) => a + m.bytes, 0);
+        assert(bytes < 600000, 'a mode change sends ' + bytes + ' bytes');
+        const nd = eco.find((m) => m.ref === cl.refs.needle).px;
+        let bl = 0, rd = 0; for (let i = 0; i < nd.length; i += 4) { bl += nd[i + 2] * nd[i + 3]; rd += nd[i] * nd[i + 3]; }
+        assert(bl > rd, 'the needle sent blue');
+        assert.strictEqual(cl.themeNow, 'blue');
+        n0 = sent.length; feed('Comfort'); assert.strictEqual(cl.themeNow, 'orange'); assert.strictEqual(pxOf(n0).length, moving.length);
+        n0 = sent.length; feed('Sport'); assert.strictEqual(cl.themeNow, 'red'); assert.strictEqual(pxOf(n0).length, moving.length);
+        // the same layers all along: nothing made, nothing dropped
+        assert(!sent.slice(sent.length - 200).some((m) => m.op === 'image' || m.op === 'drop'), 'no layers made or dropped');
+        if (process.env.DBG) console.log('mode change bytes', bytes);
+        done();
+    }, 300);
+}
+
+preloadDrive(() => barDrive(() => themeDrive(() => console.log('arc cluster self-check ok'))));

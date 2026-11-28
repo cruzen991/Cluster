@@ -389,6 +389,7 @@ class ClassicCluster {
             this.panels[k] = { ref: R[k], p: new A.Panel(L[k].iw || L[k].w, L[k].ih || L[k].h) };
         }
         this.panelAt = 0; this.slow = null;
+        this._themeStart(art, o);
 
         const count = Object.keys(R).length;
         if (count > MAX_LAYERS) this.log.warn(count + ' layers asked for, more than cluster-render allows one app (' + MAX_LAYERS + ')');
@@ -516,6 +517,7 @@ class ClassicCluster {
             this.panels[key] = { ref: R[key], p, bands: bands ? bands.map((b, i) => ({ b, ref: R[key + '#' + i] })) : null };
         }
         this.panelAt = 0; this.slow = null;
+        this._themeStart(art, o);
 
         const count = Object.keys(R).length;
         if (count > MAX_LAYERS_PRE) this.log.warn(count + ' layers asked for, more than cluster-render allows one app (' + MAX_LAYERS_PRE + ')');
@@ -674,8 +676,47 @@ class ClassicCluster {
      * The arc style, each tick: the needle (as dialState), the numerals' sizes following the needle
      * (rpm = where the needle is now), and the readouts (at most 5 times a second, changed cells only).
      */
+    /**
+     * Drive-mode colours (arc.js THEMES): the layers are made red; the needle's and the lit arc's pictures are
+     * sent again in the mode's colour when the mode changes (the same sizes: no new layers, no more of the renderer's
+     * memory; a few hundred KB once per change). The other colours are drawn ahead, on turns of their own.
+     */
+    _themeStart(art, o) {
+        this.themeCtx = { art, o }; this.themeNow = 'red';
+        const cur = this.cr;
+        Object.keys(A.THEMES).forEach((t) => later(() => { if (this.cr === cur && this.themeCtx && this.themeCtx.art === art) this._themeArt(t); }));
+    }
+    _themeArt(theme) {
+        const { art, o } = this.themeCtx;
+        art.themes = art.themes || {};
+        const t = art.themes[theme] = art.themes[theme] || {};
+        if (!t.needle) t.needle = A.needleSprite(Object.assign({}, o, { theme }));
+        if (!t.lits && this.dials && this.dials.tach && this.dials.tach.pre) t.lits = PL.PIECES.map((P, k) => PL.litPiece(k, A.THEMES[theme].core).cv);
+        return t;
+    }
+    _applyTheme(theme) {
+        const d = this.dials && this.dials.tach;
+        if (!d || !this.themeCtx || theme === this.themeNow || !A.THEMES[theme]) return;
+        if (this.mode === 'shader') return;                    // its colours are in its shader (not a mode the app uses)
+        this.themeNow = theme;
+        const t = this._themeArt(theme);
+        if (d.pre) {
+            d.pieces.forEach((p, i) => this.cr.pixels(p.lit, null, buf(t.lits[i])));
+            this.cr.pixels(d.needle, null, buf(t.needle.cv));
+        } else {
+            if (d.needle) this.cr.pixels(d.needle, null, buf(t.needle.cv));
+            const sp = A.arcFx(Object.assign({}, this.themeCtx.o, { theme }));
+            if (d.spec.main) d.spec.main = sp.main;
+            d.spec.ring = sp.ring;
+            d.st = null;                                        // the lit arc drawn again whole, in the new colour
+        }
+        this.sends++;
+        this.log.info('drive-mode colours: ' + theme);
+    }
+
     _arcTick(s, v, a, rpm, lv, now) {
         const d = this.dials.tach;
+        if (d && !d.pending && !this.sweep) this._applyTheme(A.themeOf(v.modeText));
         if (d && d.pre) this._preDial(s, v, d, a, lv, now);
         else if (d && !d.pending) {
             const st = { a, b: F.SUB.a0, c: F.SUB.a0, lv };
@@ -943,7 +984,7 @@ function arcTexts(s, v, sweep) {
         left: { oil: T(v.oilC), cool: T(v.coolC), tu, oilWarn: v.oilC >= 130, coolWarn: v.coolC >= 112, fuel: v.fuel, range: up(v.rangeText || '---') },
         right: { boost, torque: s.torqueShow && s.boostStyle !== 'bar' ? tq : null, tq: lb ? 'LB-FT' : 'NM', odo: up(v.odoText || '---'), peak: v.peakPsi >= 1 ? 'PEAK ' + Math.round(v.peakPsi) : '',
             bar: s.boostStyle === 'bar', psi: sweep ? A.BOOST_BAR.max : v.boostPsi, peakPsi: sweep ? 0 : v.peakPsi },
-        strip: { outside: T(v.outsideC) === '--' ? '--' : T(v.outsideC) + tu, mode: up(v.modeText) || 'DRIVE', intake: T(v.iatC) === '--' ? '--' : T(v.iatC) + tu },
+        strip: { outside: T(v.outsideC) === '--' ? '--' : T(v.outsideC) + tu, mode: up(v.modeText) || 'DRIVE', theme: A.themeOf(v.modeText), intake: T(v.iatC) === '--' ? '--' : T(v.iatC) + tu },
     };
 }
 

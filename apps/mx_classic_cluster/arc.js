@@ -212,16 +212,33 @@ function faceWith(base, nums, levels) {
     return cv;
 }
 
-/** The moving parts for fx.js: the needle (starting outside the gear disc), the lit arc, the shift lights. */
+/*
+ * Drive-mode colours (0.17.0): the needle and the lit rpm arc take the colour of the drive mode, as BMW's own cluster
+ * does: Sport and Sport Plus red (as before), Comfort orange, Eco Pro blue; any other mode (Adaptive, none) red. The
+ * mode's name in the bottom row takes it too. The scale's red (redline ticks, 7 and 8) and the shift lights don't
+ * change. Each theme: the needle's "glass" (core, fill, edge, hi) and the text's colour.
+ */
+const THEMES = {
+    red: { core: NEEDLE_RED, fill: [200, 20, 20], edge: [255, 150, 140], hi: [255, 170, 170], text: [255, 64, 52] },
+    orange: { core: [255, 128, 20], fill: [212, 88, 8], edge: [255, 202, 140], hi: [255, 216, 170], text: ORANGE },
+    blue: { core: [38, 140, 255], fill: [18, 78, 212], edge: [150, 200, 255], hi: [176, 214, 255], text: [74, 156, 255] },
+};
+/** The theme for a drive mode's name ('Eco Pro', 'Comfort Plus', ...). */
+function themeOf(mode) {
+    const m = String(mode || '').toLowerCase();
+    return /^eco/.test(m) ? 'blue' : /^comfort/.test(m) ? 'orange' : 'red';
+}
+
+/** The moving parts for fx.js: the needle (starting outside the gear disc), the lit arc, the shift lights. opts.theme: THEMES' key. */
 function arcFx(opts) {
-    const max = opts.max || 8000, red = opts.redline || 7000;
+    const max = opts.max || 8000, red = opts.redline || 7000, T = THEMES[opts.theme] || THEMES.red;
     return {
         id: 'arc-rpm', w: DW, h: DH, cx: DCX, cy: DCY, max, redline: red,
         // "red glass": a pale pink outline round a see-through red middle, a red glow
         main: { shape: 'hollow', len: R - 4, tail: -NEEDLE_IN, inner: NEEDLE_IN, wid: 20, ow: 2.5, glowR: 6, glowA: 0.25, fillA: 0.55,
-            col: { edge: [255, 150, 140], fill: [200, 20, 20], glow: NEEDLE_RED, core: NEEDLE_RED, hi: [255, 170, 170] } },
+            col: { edge: T.edge, fill: T.fill, glow: T.core, core: T.core, hi: T.hi } },
         subs: [], hub: null, subHub: null,
-        ring: { r: R_PROG, w: W_PROG, a0: A0, a1: A1, aRed: A1 + 1, lit: NEEDLE_RED, red: NEEDLE_RED },
+        ring: { r: R_PROG, w: W_PROG, a0: A0, a1: A1, aRed: A1 + 1, lit: T.core, red: T.core },
         lights: { r: R_LIGHTS, w: W_LIGHTS, n: 10, a0: angleOf(red - 2000, max), a1: angleOf(red, max), gap: 0.8,
             green: 4, yellow: 7, cGreen: [40, 220, 90], cYellow: [255, 200, 30], cRed: [255, 40, 40], cDim: [60, 16, 16] },
     };
@@ -516,10 +533,10 @@ function drawStrip(p, v) {
     // a mode name that still wouldn't is drawn smaller rather than cut
     // (0.15.7: no grey rule above the row)
     p.cell('out', { x: 0, y: 8, w: 220, h: 44 }, v.outside, (cv) => cv.text(v.outside, 110, 38, 20, WHITE, { font: 'orb', align: 'center', literal: true }));
-    p.cell('mode', { x: 220, y: 8, w: 360, h: 44 }, v.mode, (cv) => {
+    p.cell('mode', { x: 220, y: 8, w: 360, h: 44 }, v.mode + '|' + v.theme, (cv) => {
         let size = 20;
         while (size > 12 && cv.textWidth(v.mode, size, { font: 'orb', literal: true, spacing: 3 }) > 340) size -= 2;
-        cv.text(v.mode, 400, 38, size, ORANGE, { font: 'orb', align: 'center', literal: true, spacing: 3 });
+        cv.text(v.mode, 400, 38, size, (THEMES[v.theme] || THEMES.orange).text, { font: 'orb', align: 'center', literal: true, spacing: 3 });
     });
     p.cell('iat', { x: 580, y: 8, w: 220, h: 44 }, v.intake, (cv) => {
         cv.text('INTAKE', 676, 38, 13, DIM, { font: 'orbm', align: 'right', literal: true, spacing: 2 });
@@ -599,7 +616,7 @@ function roundD(cv, f, g, dx, dy, k, col) {
 
 module.exports = {
     bigText, needleSprite, gridBackground, duskBackground, duskTopBackground, background, BACKGROUNDS, BG_W, BG_H,
-    BOOST_DROP, boostRow, BOOST_BAR, boostBarU, drawBoostBar, TEMP_FIG, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
+    THEMES, themeOf, BOOST_DROP, boostRow, BOOST_BAR, boostBarU, drawBoostBar, TEMP_FIG, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
     CENTRE_GEAR, CENTRE_SPEED, CENTRE_SPEED_BASE, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,
 };

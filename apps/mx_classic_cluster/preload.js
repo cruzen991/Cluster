@@ -76,10 +76,10 @@ function ringPieces() {
 const PIECES = ringPieces();
 const RING_IN = A.R_PROG - A.W_PROG / 2 - 1.5, RING_OUT = A.R_PROG + A.W_PROG / 2 + 1.5;   // the covers' reach (one pixel past the lit arc's)
 
-/** Lit piece k: the lit arc between its ends, cut hard (pieces meet without a seam). */
-function litPiece(k) {
+/** Lit piece k: the lit arc between its ends, cut hard (pieces meet without a seam); col: its colour (the needle's red). */
+function litPiece(k, col) {
     const P = PIECES[k], q = boxOf(sectorPts(RING_IN, RING_OUT, P.s - 1, P.e + 1), 3);
-    const cv = new Canvas(q.w, q.h).clear([0, 0, 0, 0]), c = A.NEEDLE_RED.concat([255]);
+    const cv = new Canvas(q.w, q.h).clear([0, 0, 0, 0]), c = (col || A.NEEDLE_RED).slice(0, 3).concat([255]);
     for (let y = 0; y < q.h; y++) for (let x = 0; x < q.w; x++) {
         const px = x + q.x + 0.5 - DCX, py = y + q.y + 0.5 - DCY, rr = Math.sqrt(px * px + py * py);
         const band = cl(A.W_PROG / 2 + 0.5 - Math.abs(rr - A.R_PROG));
