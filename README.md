@@ -17,9 +17,10 @@ tachometer in the middle, the speed and gear inside it, and big readouts either 
 - **Right:** boost, with the drive's peak beside its label, and the odometer. Optionally boost as
   [a number and a segmented bar](docs/arc-boost-bar.png) (0-25 psi, a segment a psi, red from 21, the peak an orange marker over it).
 - **Bottom row:** outside temperature, drive mode and intake air temperature.
-- **Drive-mode colours:** the needle, the lit rev arc and the mode's name follow the drive mode:
-  [orange in Comfort, red in Sport and Sport Plus, blue in Eco Pro](docs/arc-modes.png) (red in Adaptive). The
-  redline marks and shift lights keep their colours.
+- **Drive-mode colours:** the needle, the lit rev arc, the background's glow and the mode's name follow the drive
+  mode: [orange in Comfort, red in Sport and Sport Plus, blue in Eco Pro](docs/arc-modes.png) (red in Adaptive).
+  The redline marks, shift lights and boost bar keep their colours. A mode change re-sends those pictures, about
+  1.8 MB, once.
 - **Backgrounds:** Dusk (above, the default), [Dusk from the top](docs/arc-dusk-top.png) (the red coming down from
   the top, pure black along the bottom so BMW's seat-belt light and gear letter show without black boxes round
   them) or [Horizon grid](docs/arc-grid.png).

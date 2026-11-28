@@ -321,9 +321,12 @@ class ClassicCluster {
         this.arc = true;
         // the stock cluster is always hidden in this style: the readouts cover the whole panel. The
         // background is the horizon grid, drawn at half size and stretched (bilinear) by the renderer
+        // the background's pictures, sent again in the drive mode's colour when it changes (_applyTheme)
+        const sends = [];
+        this._sendBg = (bg) => sends.forEach((f) => f(bg));
         if (!open) {
             R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: H, iw: A.BG_W, ih: A.BG_H, sampling: 'bilinear' });
-            cr.pixels(R.back, null, buf(art.bg));
+            sends.push((bg) => cr.pixels(R.back, null, buf(bg)));
         } else {
             // the bottom strip open (A.stripOpen): the background ends at the mode's top, its own top part (not
             // squeezed); what of the strip the mode keeps covered gets the background's own bottom ('letter', so it
@@ -331,20 +334,21 @@ class ClassicCluster {
             const top = A.stripTop(s.bottomStrip), k = A.BG_H / H;
             const bh = Math.floor(top * k);
             R.back = img({ klass: 'ambient', x: 0, y: 0, w: W, h: Math.round(bh / k), iw: A.BG_W, ih: bh, sampling: 'bilinear' });
-            cr.pixels(R.back, null, crop(art.bg, { x: 0, y: 0, w: A.BG_W, h: bh }));
+            sends.push((bg) => cr.pixels(R.back, null, crop(bg, { x: 0, y: 0, w: A.BG_W, h: bh })));
             A.stripCovers(s.bottomStrip).forEach(([x0, x1], i) => {
                 const own = s.bottomStrip === 'letter' && Number.isInteger(x0 * k) && Number.isInteger(x1 * k) && Number.isInteger(top * k);
                 const q = { klass: 'ambient', x: x0, y: top, w: x1 - x0, h: H - top };
                 if (own) {
                     const iw = (x1 - x0) * k, ih = A.BG_H - top * k;
                     const ref = R['stripCover' + i] = img(Object.assign(q, { iw, ih, sampling: 'bilinear' }));
-                    cr.pixels(ref, null, crop(art.bg, { x: x0 * k, y: top * k, w: iw, h: ih }));
+                    sends.push((bg) => cr.pixels(ref, null, crop(bg, { x: x0 * k, y: top * k, w: iw, h: ih })));
                 } else {
                     const ref = R['stripCover' + i] = img(Object.assign(q, { iw: 4, ih: 4 }));
                     cr.pixels(ref, null, blackPx(4, 4));
                 }
             });
         }
+        this._sendBg(art.bg);
 
         this.mode = s.needles === 'shader' ? 'shader' : s.needles === 'redraw' ? 'redraw' : s.needles === 'preload' && !this.preloadOff ? 'preload' : 'rotate';
         if (this.mode === 'preload') return this._preLayers(s, o, art, t0, L, base, img, R);
@@ -692,6 +696,10 @@ class ClassicCluster {
         const t = art.themes[theme] = art.themes[theme] || {};
         if (!t.needle) t.needle = A.needleSprite(Object.assign({}, o, { theme }));
         if (!t.lits && this.dials && this.dials.tach && this.dials.tach.pre) t.lits = PL.PIECES.map((P, k) => PL.litPiece(k, A.THEMES[theme].core).cv);
+        // the background in the mode's colour (0.18.0), for the background chosen now
+        if (art.bg && (!art.bgTint || art.bgTint.kind !== art.bgKind)) art.bgTint = { kind: art.bgKind, red: art.bg };
+        if (art.bgTint && !art.bgTint[theme]) art.bgTint[theme] = A.tintBackground(art.bg, theme);
+        t.bg = art.bgTint ? art.bgTint[theme] : null;
         return t;
     }
     _applyTheme(theme) {
@@ -710,6 +718,7 @@ class ClassicCluster {
             d.spec.ring = sp.ring;
             d.st = null;                                        // the lit arc drawn again whole, in the new colour
         }
+        if (this._sendBg && t.bg) this._sendBg(t.bg);
         this.sends++;
         this.log.info('drive-mode colours: ' + theme);
     }

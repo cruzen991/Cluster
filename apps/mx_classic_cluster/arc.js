@@ -223,6 +223,24 @@ const THEMES = {
     orange: { core: [232, 92, 8], fill: [168, 58, 4], edge: [255, 172, 110], hi: [255, 188, 136], text: [236, 98, 16] },   // 0.17.1: darker
     blue: { core: [38, 140, 255], fill: [18, 78, 212], edge: [150, 200, 255], hi: [176, 214, 255], text: [74, 156, 255] },
 };
+/**
+ * A background in a theme's colour (0.18.0): each pixel's red beyond its other channels (the glow, the grid's lines)
+ * becomes the theme's colour at the same strength; the rest (the near-black greys) stays. Red: the picture itself.
+ */
+function tintBackground(cv, theme) {
+    const T = THEMES[theme];
+    if (!T || theme === 'red') return cv;
+    const m = Math.max(...T.core), c = T.core.map((v) => v / m), out = new Canvas(cv.w, cv.h), d = out.d;
+    d.set(cv.d);
+    for (let i = 0; i < d.length; i += 4) {
+        const e = d[i] - Math.max(d[i + 1], d[i + 2]);
+        if (e <= 0) continue;
+        d[i] = Math.min(255, Math.round(d[i] - e + e * c[0]));
+        d[i + 1] = Math.min(255, Math.round(d[i + 1] + e * c[1]));
+        d[i + 2] = Math.min(255, Math.round(d[i + 2] + e * c[2]));
+    }
+    return out;
+}
 /** The theme for a drive mode's name ('Eco Pro', 'Comfort Plus', ...). */
 function themeOf(mode) {
     const m = String(mode || '').toLowerCase();
@@ -616,7 +634,7 @@ function roundD(cv, f, g, dx, dy, k, col) {
 
 module.exports = {
     bigText, needleSprite, gridBackground, duskBackground, duskTopBackground, background, BACKGROUNDS, BG_W, BG_H,
-    THEMES, themeOf, BOOST_DROP, boostRow, BOOST_BAR, boostBarU, drawBoostBar, TEMP_FIG, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
+    THEMES, themeOf, tintBackground, BOOST_DROP, boostRow, BOOST_BAR, boostBarU, drawBoostBar, TEMP_FIG, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
     CENTRE_GEAR, CENTRE_SPEED, CENTRE_SPEED_BASE, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,
 };

@@ -937,6 +937,26 @@ function barDrive(done) {
     assert(blue > 50, 'ECO PRO in blue');
 }
 
+/* the background in a mode's colour: the red glow becomes the colour, the greys stay, red is the picture itself */
+{
+    const A = require('./arc');
+    for (const k of Object.keys(A.BACKGROUNDS)) {
+        const bg = A.background(k);
+        assert.strictEqual(A.tintBackground(bg, 'red'), bg);
+        for (const th of ['orange', 'blue']) {
+            const t = A.tintBackground(bg, th);
+            let redLeft = 0, greyChanged = 0;
+            for (let i = 0; i < bg.d.length; i += 4) {
+                const r = bg.d[i], g = bg.d[i + 1], b = bg.d[i + 2];
+                if (r <= Math.max(g, b) && (t.d[i] !== r || t.d[i + 1] !== g || t.d[i + 2] !== b)) greyChanged++;
+                if (th === 'blue' && t.d[i] - Math.max(t.d[i + 1], t.d[i + 2]) > 4) redLeft++;
+            }
+            assert.strictEqual(greyChanged, 0, k + ' ' + th + ': greys kept');
+            assert.strictEqual(redLeft, 0, k + ' ' + th + ': no red left');
+        }
+    }
+}
+
 /* the cluster pre-loaded: a mode change sends the needle and lit arc again, once, in its colour; nothing else */
 function themeDrive(done) {
     const C = require('./cluster'), A = require('./arc');
@@ -977,8 +997,15 @@ function themeDrive(done) {
         let bl = 0, rd = 0; for (let i = 0; i < nd.length; i += 4) { bl += nd[i + 2] * nd[i + 3]; rd += nd[i] * nd[i + 3]; }
         assert(bl > rd, 'the needle sent blue');
         assert.strictEqual(cl.themeNow, 'blue');
+        // the background too, once, in blue (0.18.0)
+        const bgs = sent.slice(n0).filter((m) => m.op === 'pixels' && m.ref === cl.refs.back);
+        assert.strictEqual(bgs.length, 1, 'the background sent once');
+        let bb = 0, br = 0; for (let i = 0; i < bgs[0].px.length; i += 4) { bb += bgs[0].px[i + 2]; br += bgs[0].px[i]; }
+        assert(bb > br * 1.5, 'the background blue: ' + bb + ' / ' + br);
         n0 = sent.length; feed('Comfort'); assert.strictEqual(cl.themeNow, 'orange'); assert.strictEqual(pxOf(n0).length, moving.length);
         n0 = sent.length; feed('Sport'); assert.strictEqual(cl.themeNow, 'red'); assert.strictEqual(pxOf(n0).length, moving.length);
+        const back = sent.slice(n0).find((m) => m.op === 'pixels' && m.ref === cl.refs.back);
+        assert(back && Buffer.compare(Buffer.from(back.px), Buffer.from(cl.themeCtx.art.bg.d)) === 0, 'back to the red background itself');
         // the same layers all along: nothing made, nothing dropped
         assert(!sent.slice(sent.length - 200).some((m) => m.op === 'image' || m.op === 'drop'), 'no layers made or dropped');
         if (process.env.DBG) console.log('mode change bytes', bytes);
