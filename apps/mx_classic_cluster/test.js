@@ -252,7 +252,7 @@ for (const st of ['tech']) {
     assert(top < 20, 'black at the top (' + top + ')');
     assert(bottom > 60, 'red lines near the bottom (' + bottom + ')');
     const bg2 = require('./app.json').settings.find((x) => x.key === 'arcBg');
-    assert(bg2 && bg2.default === 'dusk' && bg2.options.map((o) => o[0]).join() === 'dusk,grid', 'Dusk (default) and Horizon grid only');
+    assert(bg2 && bg2.default === 'dusk' && bg2.options.map((o) => o[0]).join() === 'dusk,duskTop,grid', 'Dusk (default), Dusk from the top, Horizon grid');
     assert(bg2.aliases.graphite === 'dusk' && bg2.aliases.twin === 'dusk' && bg2.reset, 'a removed choice saved before: Dusk');
     assert.deepStrictEqual(Object.keys(A.BACKGROUNDS), bg2.options.map((o) => o[0]), 'a picture for every choice');
     for (const k of ['dusk']) {
@@ -261,6 +261,14 @@ for (const st of ['tech']) {
         for (let i = 3; i < c.d.length; i += 4) if (c.d[i] !== 255) op = false;
         assert(op && c.d.length === A.BG_W * A.BG_H * 4, k + ' opaque, half size');
         assert(px(480, 355) > 60 && px(480, 20) < 10, 'dusk: red at the bottom, black at the top');
+    }
+    {
+        const c = A.background('duskTop'), at = (x, y) => [0, 1, 2].map((k) => c.d[(y * A.BG_W + x) * 4 + k]);
+        assert(at(480, 5)[0] > 60, 'dusk from the top: red at the top');
+        // pure black along the bottom (BMW's seat-belt light and gear letter, y 663-720 = rows 331-359), every column
+        let worst = 0;
+        for (let y = 300; y < A.BG_H; y++) for (let x = 0; x < A.BG_W; x++) worst = Math.max(worst, ...at(x, y));
+        assert.strictEqual(worst, 0, 'pure black from y 600 down');
     }
 }
 

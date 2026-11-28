@@ -16,7 +16,9 @@ tachometer in the middle, the speed and gear inside it, and big readouts either 
 - **Left:** oil and coolant temperature, a fuel bar and the range.
 - **Right:** boost, with the drive's peak beside its label, and the odometer.
 - **Bottom row:** outside temperature, drive mode and intake air temperature.
-- **Backgrounds:** Dusk (above, the default) or [Horizon grid](docs/arc-grid.png).
+- **Backgrounds:** Dusk (above, the default), [Dusk from the top](docs/arc-dusk-top.png) (the red coming down from
+  the top, pure black along the bottom so BMW's seat-belt light and gear letter show without black boxes round
+  them) or [Horizon grid](docs/arc-grid.png).
 
 The stock gauges are hidden while it is on; BMW's warning and indicator lights stay on top. Developed on a G20
 M340i.
@@ -39,7 +41,7 @@ uninstall it in the Store: the stock cluster comes back as soon as the app's lay
 | Setting | |
 |---|---|
 | Show on the cluster | on / off (also the app's first button); off stays off across restarts |
-| Background | Dusk (default) or Horizon grid |
+| Background | Dusk (default), Dusk from the top, or Horizon grid |
 | Driver camera above the cluster | on (default): the tach is placed so no tick sits under the Driving Assistant Professional camera; off for the full-size tach |
 | Speed | mph or km/h |
 | Temperatures | °F or °C |

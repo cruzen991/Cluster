@@ -275,7 +275,20 @@ function duskBackground() {
 }
 
 /** The arc style's backgrounds by their setting's value; the first is the default. */
-const BACKGROUNDS = { dusk: duskBackground, grid: gridBackground };      // 0.15.1: Graphite and Twin glow gone
+/*
+ * "Dusk from the top": Dusk upside down, the red coming down from the top edge and pure black (0, 0, 0) along the
+ * bottom, where BMW draws its seat-belt light and gear letter on black backings over us: on black they don't show.
+ */
+function duskTopBackground() {
+    const cx = BG_W / 2;
+    return fieldBackground((x, y) => {
+        const t = Math.pow(smooth(((BG_H - y) - 150) / 210), 1.6) * (0.55 + 0.45 * smooth(1 - Math.abs(x - cx) / 700));
+        const k = Math.min(1, t * 12);           // Dusk's dark base (4, 4, 5) fades to pure black where the red ends
+        return [4 * k + 80 * t, 4 * k + 8 * t, 5 * k + 10 * t];
+    });
+}
+
+const BACKGROUNDS = { dusk: duskBackground, duskTop: duskTopBackground, grid: gridBackground };      // 0.15.1: Graphite and Twin glow gone
 function background(kind) { return (BACKGROUNDS[kind] || duskBackground)(); }
 
 /**
@@ -484,7 +497,7 @@ function bigText(cv, str, x, y, size, col) {
 }
 
 module.exports = {
-    bigText, needleSprite, gridBackground, duskBackground, background, BACKGROUNDS, BG_W, BG_H,
+    bigText, needleSprite, gridBackground, duskBackground, duskTopBackground, background, BACKGROUNDS, BG_W, BG_H,
     BOOST_DROP, boostRow, TEMP_FIG, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
     CENTRE_GEAR, CENTRE_SPEED, CENTRE_SPEED_BASE, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,

@@ -60,7 +60,7 @@ mgu.run({
             needleResponse: 'smooth',
             bottomStrip: ['letter', 'open', 'gear', 'nogear'].indexOf(settings.get('bottomStrip')) >= 0 ? settings.get('bottomStrip') : 'covered',
             notch: settings.get('notch') !== false,
-            arcBg: settings.get('arcBg') === 'grid' ? 'grid' : 'dusk',
+            arcBg: ['grid', 'duskTop'].indexOf(settings.get('arcBg')) >= 0 ? settings.get('arcBg') : 'dusk',
             shift: settings.get('shift') !== false,
             needles: 'preload',                      // falls back to rotating by itself if the renderer refuses (cluster.js)
         });
