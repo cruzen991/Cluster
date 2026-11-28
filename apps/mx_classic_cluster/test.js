@@ -555,6 +555,21 @@ const PL = require('./preload');
     assert.strictEqual(outside, 0, outside + ' inked pixels outside the strips');
 }
 
+/* the guard: the picture lost right after the driver changes a setting is not a failure */
+{
+    const { Guard, SETTING_GRACE_MS, LOSSES } = require('./guard');
+    const os = require('os'), path = require('path'), fs = require('fs');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-'));
+    let now = 1e6;
+    const g = new Guard({ dir, log: { info() {}, warn() {} }, now: () => now });
+    g.boot && g.boot(); g.want && g.want();
+    const showAndLose = () => { g.target('shown', 'us', ''); now += 2000; g.target('acquiring', 'us', ''); now += 1000; };
+    for (let k = 0; k < LOSSES + 2; k++) { g.settingChanged(); showAndLose(); now += 4000; }
+    assert.strictEqual(g.status().strikes, 0, 'setting changes: no strike');
+    for (let k = 0; k < LOSSES; k++) { now += SETTING_GRACE_MS; showAndLose(); }
+    assert.strictEqual(g.status().strikes, 1, 'the same losses with no setting change: a strike');
+}
+
 /* late needle frames counted for the app's screen, only while the cluster is drawn */
 {
     const C = require('./cluster');

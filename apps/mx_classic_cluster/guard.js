@@ -26,6 +26,7 @@ const path = require('path');
 
 const STABLE_MS = 20000;
 const LOSS_MS = 10000;
+const SETTING_GRACE_MS = 5000;   // after a setting change, a lost picture is the change's (settingChanged)
 const LOSSES = 3, LOSS_WINDOW_MS = 120000;
 const ERRORS = 5, ERROR_WINDOW_MS = 60000;
 const STRIKES = 2;
@@ -87,6 +88,12 @@ class Guard {
         this._save();
     }
 
+    /**
+     * The driver changed a setting: the cluster may be rebuilt or re-acquired for it (Retry after BMW pop-ups
+     * makes the layers again), so the picture going away in the next SETTING_GRACE_MS is theirs, not a failure.
+     */
+    settingChanged() { this.graceUntil = this.now() + SETTING_GRACE_MS; }
+
     /** A panel target event from cluster-render. */
     target(state, holder, reason) {
         const now = this.now();
@@ -104,7 +111,7 @@ class Guard {
         this.shownAt = 0;
         if (this.stableTimer) clearTimeout(this.stableTimer);
         this.stableTimer = null;
-        if (!this.wanted || since >= LOSS_MS) return;
+        if (!this.wanted || since >= LOSS_MS || now < (this.graceUntil || 0)) return;
         const bmw = state === 'parked' || /stock|foreign/.test(String(holder)) || /stock|foreign|lock|yield|speech/i.test(String(reason || ''));
         if (bmw) return;
         this._loss('panel ' + state + (reason ? ' (' + reason + ')' : '') + ' ' + Math.round(since / 100) / 10 + ' s after it showed');
@@ -156,4 +163,4 @@ class Guard {
     status() { return { strikes: this.st.strikes, tripped: this.st.tripped }; }
 }
 
-module.exports = { Guard, STABLE_MS, LOSS_MS, LOSSES, STRIKES };
+module.exports = { Guard, STABLE_MS, LOSS_MS, LOSSES, STRIKES, SETTING_GRACE_MS };

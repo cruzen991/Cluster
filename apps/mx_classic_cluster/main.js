@@ -172,6 +172,7 @@ mgu.run({
             const s = S();
             if (key === 'redline') car.setRedline(s.redline);
             if (key === 'on' && value === true) { tripped = ''; guard.retry(); }
+            if (key !== 'on') guard.settingChanged();      // a rebuild it causes is not a failure
             if (key === 'retake' && cluster.enabled) { cluster.enable(false); }     // the layers are made again with it
             cluster.build();
             apply();

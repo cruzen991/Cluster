@@ -77,7 +77,7 @@ picture flickering. Built in:
 | Never takes the slot from BMW | cluster-render never unmaps BMW's content, and the app waits for the slot to be free by default |
 | Drawn under the telltales | the panel is drawn over the gauges and under the warning and indicator lights |
 | Off releases everything | nothing of the app is left on the cluster |
-| Guard | the picture lost 3 times in 2 minutes, the head unit or renderer going down within 20 s of it first showing, or 5 drawing errors in a minute: one strike each; 2 strikes turn the cluster off until you turn it on again in the app (its screen says *Off for safety* and why) |
+| Guard | the picture lost 3 times in 2 minutes, the head unit or renderer going down within 20 s of it first showing, or 5 drawing errors in a minute: one strike each; 2 strikes turn the cluster off until you turn it on again in the app (its screen says *Off for safety* and why). The picture going away within 5 s of you changing a setting is not counted |
 | Stale data | no speed or engine speed for 1.5 s: the needle drops to zero and the readouts show dashes |
 
 ## Before you drive with it
