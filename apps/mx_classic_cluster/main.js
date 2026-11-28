@@ -45,7 +45,7 @@ mgu.run({
             tempUnit: settings.get('tempUnit') || 'f',
             redline: Number(settings.get('redline')) || 7000,
             sweep: settings.get('sweep') !== false,
-            backdrop: settings.get('backdrop') === 'none' ? 'none' : 'full',
+            backdrop: 'full',                         // 0.15.3: no longer a setting; the Arc layout always hides the stock gauges
             // 0.15.0: no longer settings (a value saved before is ignored): the M340i's 59 l tank, boost over the
             // air outside (gauge), the dials where they are, Arc style, pre-loaded drawing, smooth needle
             tank: 59,

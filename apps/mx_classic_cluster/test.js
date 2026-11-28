@@ -290,13 +290,12 @@ for (const st of ['tech']) {
     assert(r && r.default === 'software' && r.hidden && r.reset);
     assert(!spec.settings.some((x) => x.key === 'illum'));
     assert(spec.config.dme.iat.length >= 1 && spec.signals['de.bmw.infrastructure.EnvironmentalInformation']._optional);
-    assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
     // 0.15.0: Arc only, and these are no longer settings (main.js fixes them); the colour theme hidden; no credit row
-    for (const k of ['style', 'boostRef', 'tank', 'dx', 'dy', 'needles', 'needleResponse', 'needleRate', 'torqueShow', 'torqueUnit']) assert(!spec.settings.some((x) => x.key === k), k + ' is gone');
+    for (const k of ['style', 'boostRef', 'tank', 'dx', 'dy', 'needles', 'needleResponse', 'needleRate', 'torqueShow', 'torqueUnit', 'backdrop']) assert(!spec.settings.some((x) => x.key === k), k + ' is gone');
     assert(spec.settings.find((x) => x.key === 'theme').hidden, 'the colour theme kept, not offered');
     assert.strictEqual(spec.credits, false);
     const shown = spec.settings.filter((x) => !x.hidden).map((x) => x.key);
-    assert.deepStrictEqual(shown, ['on', 'arcBg', 'notch', 'units', 'tempUnit', 'redline', 'sweep', 'shift', 'backdrop', 'bottomStrip', 'retake', 'demo']);
+    assert.deepStrictEqual(shown, ['on', 'arcBg', 'notch', 'units', 'tempUnit', 'redline', 'sweep', 'shift', 'bottomStrip', 'retake', 'demo']);
     assert(spec.settings.every((x) => !/Arc style/.test(x.label)), 'no "Arc style" in a label');
 }
 

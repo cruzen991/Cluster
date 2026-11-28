@@ -46,13 +46,12 @@ uninstall it in the Store: the stock cluster comes back as soon as the app's lay
 | Redline | 7000 for a B58; the tach's scale and the shift lights follow it |
 | Needle sweep at start | on / off (the *Needle sweep* button sweeps on demand) |
 | Shift lights | on / off |
-| Stock cluster | no effect: the Arc layout always hides the stock gauges |
 | Bottom strip (test) | *Covered* (default) or one of the test modes that leave parts of BMW's own bottom bar uncovered (below) |
 | Retry after BMW pop-ups | off (default): wait for BMW's own content to leave the panel rather than retrying against it |
 | Demo data on the cluster | off (default); on shows made-up values, for testing parked |
 
 Fixed, no longer settings: Arc style only, boost as gauge pressure, a 59 l tank (the M340i's), pre-loaded drawing,
-smooth needle response, the needle updated 60 times a second, no torque readout.
+smooth needle response, the needle updated 60 times a second, no torque readout, the stock gauges always hidden.
 
 ## Turning it on and off
 

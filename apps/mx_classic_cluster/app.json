@@ -2,7 +2,7 @@
   "id": "mx_classic_cluster",
   "title": "ARC Cluster",
   "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
-  "version": "0.15.2",
+  "version": "0.15.3",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -165,23 +165,6 @@
       "label": "Shift lights",
       "type": "bool",
       "default": true
-    },
-    {
-      "key": "backdrop",
-      "label": "Stock cluster",
-      "type": "choice",
-      "default": "full",
-      "reset": 1,
-      "options": [
-        [
-          "full",
-          "Hidden (black background, centre info)"
-        ],
-        [
-          "none",
-          "Shows between the dials"
-        ]
-      ]
     },
     {
       "key": "bottomStrip",
