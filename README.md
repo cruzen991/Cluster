@@ -258,6 +258,11 @@ times a second. While driving, each glide now starts where the needle is and las
 time between rpms (x1.15), so the needle never stops waiting for the next one. Measured on the desk: the sweep
 went from 9-15 stops to none (only the planned hold at the top); driving from about 20 stops in 5 s to none.
 
+**Torque and two backgrounds gone (0.15.1):** no torque readout or torque unit setting (the car's torque is not
+subscribed to; the drawing code stays, off). Backgrounds: Dusk (the default) and Horizon grid; Graphite and Twin
+glow are gone. The update moves every car to Dusk once ("reset": 1; a saved Graphite or Twin glow is read as Dusk);
+a choice made after it is kept.
+
 **Settings cleaned up (0.15.0):** Arc is the only style. No longer settings (a value saved before is ignored):
 Gauge style (Arc), Boost signal (gauge: over the air outside), Fuel tank size (59 l, the M340i's), Dials apart and
 Dials up / down (0), Drawing (pre-loaded, falling back to the rotating layer by itself if the renderer refuses),

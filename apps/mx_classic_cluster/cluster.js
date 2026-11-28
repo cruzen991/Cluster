@@ -234,7 +234,7 @@ class ClassicCluster {
                 const art = this.arcArt(o);
                 later(() => {
                     if (!live()) return;
-                    const bk = A.BACKGROUNDS[s.arcBg] ? s.arcBg : 'grid';
+                    const bk = A.BACKGROUNDS[s.arcBg] ? s.arcBg : 'dusk';
                     if (!art.bg || art.bgKind !== bk) { art.bg = A.background(bk); art.bgKind = bk; }
                     // the pre-loaded art, each part on a turn of its own (tens of ms each here, more on the head unit)
                     const pre = s.needles === 'preload' && !this.preloadOff;

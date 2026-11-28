@@ -255,24 +255,6 @@ function gridBackground() {
     return cv;
 }
 
-/**
- * "Graphite": dark grey falling to black towards the bottom and the sides, with a soft red pool of
- * light under the dial. Smooth, so half size loses nothing.
- */
-function graphiteBackground() {
-    const cv = new Canvas(BG_W, BG_H), d = cv.d, cx = BG_W / 2;
-    for (let y = 0; y < BG_H; y++) {
-        const py = y + 0.5, v = 10 + 16 * (1 - py / BG_H);
-        for (let x = 0; x < BG_W; x++) {
-            const px = x + 0.5, i = (y * BG_W + x) * 4;
-            const side = Math.max(0, 1 - Math.abs(px - cx) / 520);
-            const p = Math.max(0, 1 - Math.hypot((px - cx) / 420, (py - 330) / 70)), pool = p * p;
-            d[i] = v * side + 4 + 70 * pool; d[i + 1] = v * side + 4 + 12 * pool; d[i + 2] = v * side + 5 + 12 * pool; d[i + 3] = 255;
-        }
-    }
-    return cv;
-}
-
 /** A half-size background from a function of the pixel centre -> [r, g, b] (opaque). */
 function fieldBackground(fn) {
     const cv = new Canvas(BG_W, BG_H), d = cv.d;
@@ -293,18 +275,9 @@ function duskBackground() {
     });
 }
 
-/** "Twin glow": a soft red light behind each side's readouts, the middle dark. */
-function twinGlowBackground() {
-    return fieldBackground((x, y) => {
-        let g = 0;
-        for (const gx of [150, 810]) g += Math.pow(smooth(1 - Math.hypot((x - gx) / 200, (y - 175) / 170)), 1.5);
-        return [5 + 60 * g, 5 + 7 * g, 6 + 7 * g];
-    });
-}
-
 /** The arc style's backgrounds by their setting's value; the first is the default. */
-const BACKGROUNDS = { grid: gridBackground, graphite: graphiteBackground, dusk: duskBackground, twin: twinGlowBackground };
-function background(kind) { return (BACKGROUNDS[kind] || gridBackground)(); }
+const BACKGROUNDS = { dusk: duskBackground, grid: gridBackground };      // 0.15.1: Graphite and Twin glow gone
+function background(kind) { return (BACKGROUNDS[kind] || duskBackground)(); }
 
 /**
  * The needle alone, pointing straight up, for the "rotating layer" mode: the renderer turns this
@@ -509,7 +482,7 @@ function bigText(cv, str, x, y, size, col) {
 }
 
 module.exports = {
-    bigText, needleSprite, gridBackground, graphiteBackground, background, BACKGROUNDS, BG_W, BG_H,
+    bigText, needleSprite, gridBackground, duskBackground, background, BACKGROUNDS, BG_W, BG_H,
     BOOST_DROP, boostRow, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
     CENTRE_GEAR, CENTRE_SPEED, CENTRE_SPEED_BASE, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,

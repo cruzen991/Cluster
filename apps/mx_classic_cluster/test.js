@@ -251,22 +251,16 @@ for (const st of ['tech']) {
     assert(opaque, 'the background is opaque: it hides the stock cluster');
     assert(top < 20, 'black at the top (' + top + ')');
     assert(bottom > 60, 'red lines near the bottom (' + bottom + ')');
-    const gr = A.background('graphite');
-    assert.strictEqual(gr.d.length, A.BG_W * A.BG_H * 4);
-    let gOpaque = true;
-    for (let i = 3; i < gr.d.length; i += 4) if (gr.d[i] !== 255) gOpaque = false;
-    const at = (x, y) => gr.d[(y * A.BG_W + x) * 4];
-    assert(gOpaque && at(480, 20) > at(5, 20) && at(480, 330) > at(480, 200) && at(480, 330) > 50, 'graphite: lighter middle, red pool under the dial');
     const bg2 = require('./app.json').settings.find((x) => x.key === 'arcBg');
-    assert(bg2 && bg2.default === 'grid' && bg2.options.map((o) => o[0]).join() === 'grid,graphite,dusk,twin');
+    assert(bg2 && bg2.default === 'dusk' && bg2.options.map((o) => o[0]).join() === 'dusk,grid', 'Dusk (default) and Horizon grid only');
+    assert(bg2.aliases.graphite === 'dusk' && bg2.aliases.twin === 'dusk' && bg2.reset, 'a removed choice saved before: Dusk');
     assert.deepStrictEqual(Object.keys(A.BACKGROUNDS), bg2.options.map((o) => o[0]), 'a picture for every choice');
-    for (const k of ['dusk', 'twin']) {
+    for (const k of ['dusk']) {
         const c = A.background(k), px = (x, y) => c.d[(y * A.BG_W + x) * 4];
         let op = true;
         for (let i = 3; i < c.d.length; i += 4) if (c.d[i] !== 255) op = false;
         assert(op && c.d.length === A.BG_W * A.BG_H * 4, k + ' opaque, half size');
-        if (k === 'dusk') assert(px(480, 355) > 60 && px(480, 20) < 10, 'dusk: red at the bottom, black at the top');
-        else assert(px(150, 175) > 50 && px(810, 175) > 50 && px(480, 175) < 15, 'twin glow: red behind both sides, dark middle');
+        assert(px(480, 355) > 60 && px(480, 20) < 10, 'dusk: red at the bottom, black at the top');
     }
 }
 
@@ -298,11 +292,11 @@ for (const st of ['tech']) {
     assert(spec.config.dme.iat.length >= 1 && spec.signals['de.bmw.infrastructure.EnvironmentalInformation']._optional);
     assert.strictEqual(spec.settings.find((x) => x.key === 'backdrop').default, 'full');
     // 0.15.0: Arc only, and these are no longer settings (main.js fixes them); the colour theme hidden; no credit row
-    for (const k of ['style', 'boostRef', 'tank', 'dx', 'dy', 'needles', 'needleResponse', 'needleRate']) assert(!spec.settings.some((x) => x.key === k), k + ' is gone');
+    for (const k of ['style', 'boostRef', 'tank', 'dx', 'dy', 'needles', 'needleResponse', 'needleRate', 'torqueShow', 'torqueUnit']) assert(!spec.settings.some((x) => x.key === k), k + ' is gone');
     assert(spec.settings.find((x) => x.key === 'theme').hidden, 'the colour theme kept, not offered');
     assert.strictEqual(spec.credits, false);
     const shown = spec.settings.filter((x) => !x.hidden).map((x) => x.key);
-    assert.deepStrictEqual(shown, ['on', 'arcBg', 'notch', 'units', 'tempUnit', 'torqueShow', 'torqueUnit', 'redline', 'sweep', 'shift', 'backdrop', 'bottomStrip', 'retake', 'demo']);
+    assert.deepStrictEqual(shown, ['on', 'arcBg', 'notch', 'units', 'tempUnit', 'redline', 'sweep', 'shift', 'backdrop', 'bottomStrip', 'retake', 'demo']);
     assert(spec.settings.every((x) => !/Arc style/.test(x.label)), 'no "Arc style" in a label');
 }
 

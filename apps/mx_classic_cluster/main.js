@@ -55,12 +55,12 @@ mgu.run({
             demo: settings.get('demo') === 'on',
             retake: settings.get('retake') === true,
             style: 'arc',
-            torqueUnit: settings.get('torqueUnit') === 'nm' ? 'nm' : 'lbft',
-            torqueShow: settings.get('torqueShow') === 'on',
+            torqueUnit: 'lbft',
+            torqueShow: false,                       // 0.15.1: the torque readout is gone (its code stays, off)
             needleResponse: 'smooth',
             bottomStrip: ['letter', 'open', 'gear', 'nogear'].indexOf(settings.get('bottomStrip')) >= 0 ? settings.get('bottomStrip') : 'covered',
             notch: settings.get('notch') !== false,
-            arcBg: ['graphite', 'dusk', 'twin'].indexOf(settings.get('arcBg')) >= 0 ? settings.get('arcBg') : 'grid',
+            arcBg: settings.get('arcBg') === 'grid' ? 'grid' : 'dusk',
             shift: settings.get('shift') !== false,
             needles: 'preload',                      // falls back to rotating by itself if the renderer refuses (cluster.js)
         });
@@ -92,10 +92,8 @@ mgu.run({
             if (seenVals[k] || Object.keys(seenVals).length > 40) return;
             seenVals[k] = true; log.info(what + ' ' + JSON.stringify(raw));
         };
-        // the torque readout off (the default): the car's torque is not even subscribed to, so its updates
-        // (many a second while driving) cost nothing. Decided at start: the kit cannot unsubscribe.
-        const torqueAtStart = settings.get('torqueShow') === 'on';
-        const car = new Car(ctx, ['rpm', 'speed', 'temps', 'gear'].concat(torqueAtStart ? ['torque'] : []), {
+        // no torque readout: the car's torque is not subscribed to, so its updates (many a second) cost nothing
+        const car = new Car(ctx, ['rpm', 'speed', 'temps', 'gear'], {
             [ENV]: { ExteriorTemperature: (v) => {
                 const r = v && v.temperatureExterior;
                 if (typeof r === 'number' && r >= 0 && r < 255) { outsideC = r * 0.5 - 40; outsideAt = Date.now(); }
