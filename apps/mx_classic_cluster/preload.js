@@ -201,6 +201,9 @@ PANEL_BANDS.right = PANEL_BANDS.left;
 // torque strips
 const BOOST_DROP = A.BOOST_DROP;
 PANEL_BANDS.rightLow = [{ x: 0, y: BOOST_DROP, w: 540, h: 60 }, { x: 0, y: 128 + BOOST_DROP, w: 540, h: 40 }, { x: 0, y: 396, w: 540, h: 96 }];
+// boost as a bar (setting boostStyle 'bar'): the label, PSI, the scale's ends and the peak in one strip, clear of
+// BMW's gear box (panel y 246 on); the bar itself is an effect layer
+PANEL_BANDS.rightBar = [{ x: 0, y: A.BOOST_BAR.band.y, w: 540, h: A.BOOST_BAR.band.h }, { x: 0, y: 396, w: 540, h: 96 }];
 
 /**
  * A glyph atlas: cells side by side, the glyphs' coverage. Drawn white in a canvas (cv), sent as one
@@ -300,6 +303,73 @@ function readoutUniforms(at, str, cx, unitW) {
     return { x, g };
 }
 
+/* ---------- the boost bar (setting boostStyle 'bar'): segments the GPU draws from one uniform ---------- */
+
+/**
+ * The bar's shader for a layer spec.w x spec.h (A.BOOST_BAR.spec): spec.n slanted segments from x0 (bw wide,
+ * gap apart) at y by .. by + bh, lit up to u_v.x (0..1: a segment is lit when its middle is at or below
+ * it), red from spec.hot on; an orange marker over u_v.y (the peak, 0..1; below 0: none). No pixels.
+ */
+function segbarShader(spec) {
+    const f = (v) => { const s = String(Math.round(v * 10000) / 10000); return /[.e]/.test(s) ? s : s + '.0'; };
+    const c = (rgb) => 'vec3(' + rgb.map((v) => f(v / 255)).join(', ') + ')';
+    const sw = (spec.bw - spec.gap * (spec.n - 1)) / spec.n;
+    return [
+        '#version 100',
+        '// cc-segbar ' + JSON.stringify(spec),
+        '#ifdef GL_FRAGMENT_PRECISION_HIGH',
+        'precision highp float;',
+        '#else',
+        'precision mediump float;',
+        '#endif',
+        'uniform vec4 u_v;',
+        'varying vec2 v_uv;',
+        'void main() {',
+        '  vec2 p = v_uv * vec2(' + f(spec.w) + ', ' + f(spec.h) + ');',
+        '  vec4 o = vec4(0.0);',
+        '  float y = p.y - ' + f(spec.by) + ';',
+        '  float u = p.x - ' + f(spec.x0) + ' - ' + f(spec.skew) + ' * (' + f(spec.bh) + ' - y);',
+        '  float i = floor(u / ' + f(sw + spec.gap) + ');',
+        '  float fx = u - i * ' + f(sw + spec.gap) + ';',
+        '  float cov = clamp(fx + 0.5, 0.0, 1.0) * clamp(' + f(sw) + ' - fx + 0.5, 0.0, 1.0) * clamp(y + 0.5, 0.0, 1.0) * clamp(' + f(spec.bh) + ' - y + 0.5, 0.0, 1.0);',
+        '  if (i >= 0.0 && i < ' + f(spec.n) + ' && cov > 0.0) {',
+        '    float mid = (i + 0.5) / ' + f(spec.n) + ';',
+        '    bool hot = mid >= ' + f(spec.hot) + ';',
+        '    vec3 col = mid <= u_v.x ? (hot ? ' + c(spec.red) + ' : ' + c(spec.on) + ') : (hot ? ' + c(spec.redOff) + ' : ' + c(spec.off) + ');',
+        '    o = vec4(col, cov);',
+        '  }',
+        '  if (u_v.y >= 0.0) {',
+        '    float px = ' + f(spec.x0) + ' + ' + f(spec.bw) + ' * u_v.y;',
+        '    float ty = ' + f(spec.by - 4) + ' - p.y;',
+        '    float hw = ' + f(spec.mk / 2) + ' * ty / ' + f(spec.mh) + ';',
+        '    float m = clamp(hw - abs(p.x - px) + 0.5, 0.0, 1.0) * clamp(ty + 0.5, 0.0, 1.0) * clamp(' + f(spec.mh) + ' - ty + 0.5, 0.0, 1.0);',
+        '    if (m > 0.0) o = vec4(' + c(spec.mark) + ', m);',
+        '  }',
+        '  gl_FragColor = o;',
+        '}',
+    ].join('\n');
+}
+
+/** The shader's twin (tests, the CPU drawing, the desk stand-in): RGBA 0..255 at layer pixel (x, y); u: [frac, peak]. */
+function segbarShade(spec, u, x, y) {
+    const sw = (spec.bw - spec.gap * (spec.n - 1)) / spec.n, pitch = sw + spec.gap, cl1 = (v) => Math.max(0, Math.min(1, v));
+    let o = [0, 0, 0, 0];
+    const yy = y - spec.by, uu = x - spec.x0 - spec.skew * (spec.bh - yy);
+    const i = Math.floor(uu / pitch), fx = uu - i * pitch;
+    const cov = cl1(fx + 0.5) * cl1(sw - fx + 0.5) * cl1(yy + 0.5) * cl1(spec.bh - yy + 0.5);
+    if (i >= 0 && i < spec.n && cov > 0) {
+        const mid = (i + 0.5) / spec.n, hot = mid >= spec.hot;
+        const col = mid <= u[0] ? (hot ? spec.red : spec.on) : (hot ? spec.redOff : spec.off);
+        o = [col[0], col[1], col[2], cov * 255];
+    }
+    if (u[1] >= 0) {
+        const px = spec.x0 + spec.bw * u[1], ty = spec.by - 4 - y, hw = spec.mk / 2 * ty / spec.mh;
+        const m = cl1(hw - Math.abs(x - px) + 0.5) * cl1(ty + 0.5) * cl1(spec.mh - ty + 0.5);
+        if (m > 0) o = [spec.mark[0], spec.mark[1], spec.mark[2], m * 255];
+    }
+    return o;
+}
+
 /**
  * All the pre-loaded dial art for a redline (cached by cluster.js): { pieces: [{lit, cover}], mask,
  * lights: [..], flash, nums: [{cv, box}] }. face: the face without numerals (arc.js arcFace).
@@ -316,5 +386,5 @@ function dialArt(face, nums, spec) {
 
 module.exports = {
     PIECES, TAIL, REACH, EPS, OVER, SNAP, ringPieces, litPiece, coverPiece, trackFace, ringMask, coverTurn, coverKeys, lightSprite,
-    numeralScale, atlas, readoutShader, readoutShade, readoutUniforms, dialArt, FIGS, GEAR_GLYPHS, SLOTS, PANEL_BANDS, CAP,
+    numeralScale, atlas, readoutShader, readoutShade, readoutUniforms, segbarShader, segbarShade, dialArt, FIGS, GEAR_GLYPHS, SLOTS, PANEL_BANDS, CAP,
 };

@@ -428,7 +428,62 @@ function boostRow(torqueOn) {
     return { v: Object.assign({}, ROW.v1, { y: ROW.v1.y + d }), b: ROW.b1 + d, l: ROW.l1 + d, d };
 }
 
+/*
+ * Boost as a bar (setting boostStyle 'bar', 0.16.0): the label on the left, the figures and PSI on the right of one
+ * line, under them a bar of n slanted segments over 0-max psi (red from spec.hot), the drive's peak an orange marker
+ * over it, the scale's ends and "PEAK n" under it. All of it above y 200 of the panel, clear of BMW's gear box (y 246
+ * on). Panel pixels; the bar's layer is q, spec what its shader (preload.js segbarShader) draws in that layer.
+ */
+const BOOST_BAR = (() => {
+    const x0 = 70, x1 = 500, n = 24, max = 20;
+    const q = { x: x0 - 8, y: 124, w: x1 - x0 + 16, h: 40 };
+    const spec = { w: q.w, h: q.h, x0: 8, bw: x1 - x0, by: 22, bh: 14, n, gap: 4, skew: 4 / 14, hot: 0.85, mk: 14, mh: 12,
+        on: [245, 246, 248], off: [44, 46, 52], red: [238, 60, 50], redOff: [92, 24, 22], mark: ORANGE };
+    return { x0, x1, n, max, q, spec, lblBase: 118, base: 124, val: { x: 220, y: 66, w: 240, h: 62 }, size: 60, scaleBase: 186,
+        band: { y: 90, h: 106 } };
+})();
+/** The bar's uniform for a boost (psi or null) and peak (psi, 0 or null): [lit to (0..1, whole segments), peak (0..1 or -1)]. */
+function boostBarU(psi, peak) {
+    const B = BOOST_BAR, fr = psi == null || !isFinite(psi) ? 0 : Math.max(0, Math.min(1, Math.round(psi / B.max * B.n) / B.n));
+    const pk = peak >= 1 ? Math.max(0, Math.min(1, peak / B.max)) : -1;
+    return [fr, Math.round(pk * 1000) / 1000];
+}
+/** The bar drawn into a canvas at (ox, oy) (no GPU: the fallback drawing), from its shader's twin. */
+function drawBoostBar(cv, ox, oy, u) {
+    const S = BOOST_BAR.spec, PL = require('./preload');
+    for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) {
+        const c = PL.segbarShade(S, u, x + 0.5, y + 0.5);
+        if (c[3] <= 0) continue;
+        const i = ((oy + y) * cv.w + ox + x) * 4;
+        cv.d[i] = c[0]; cv.d[i + 1] = c[1]; cv.d[i + 2] = c[2]; cv.d[i + 3] = Math.round(c[3]);
+    }
+}
+
+function drawRightBar(p, v) {
+    const B = BOOST_BAR;
+    p.cell('lbl', { x: 0, y: 96, w: 200, h: 30 }, 'bar', (cv) => cv.text('BOOST', B.x0, B.lblBase, 18, DIM, { font: 'orbm', literal: true, spacing: 5 }));
+    // the figures and PSI end at x1 whatever their count: the centre tabular() takes, from their width
+    const dw = figW(p.cv, B.size), uw = Math.ceil(p.cv.textWidth('PSI', 22, { font: 'orbm', literal: true }));
+    const n = [...String(v.boost)].length, cx = B.x1 - (n * dw + 12 + uw) / 2;
+    tabular(p, 'boost', B.val, cx, B.base, v.boost, B.size, WHITE, 'PSI');
+    const u = boostBarU(v.psi, v.peakPsi);
+    if (p.gpu && p.gpu.boostBar) p.gpu.boostBar.u = u;
+    else p.cell('bar', B.q, u.join(' '), (cv) => drawBoostBar(cv, B.q.x, B.q.y, u));
+    p.cell('scale', { x: 40, y: 168, w: 480, h: 26 }, (v.peak || '') + '|' + u[1], (cv) => {
+        const o = { font: 'orbm', literal: true, spacing: 2 };
+        cv.text('0', B.x0, B.scaleBase, 13, DIM, o);
+        cv.text(B.max + ' PSI', B.x1, B.scaleBase, 13, DIM, Object.assign({ align: 'right' }, o));
+        if (v.peak && u[1] >= 0) {
+            const at = Math.max(B.x0 + 90, Math.min(B.x1 - 110, B.x0 + (B.x1 - B.x0) * u[1]));
+            cv.text(v.peak, at, B.scaleBase, 13, ORANGE_DIM, Object.assign({ align: 'center' }, o));
+        }
+    });
+    p.cell('odoL', { x: 0, y: 396, w: 540, h: 36 }, 'x', (cv) => LBL(cv, 270, 420, 'ODOMETER'));
+    p.cell('odo', ROW.foot, v.odo, (cv) => cv.text(v.odo, 270, ROW.fb, 26, WHITE, { font: 'orb', align: 'center', literal: true }));
+}
+
 function drawRight(p, v) {
+    if (v.bar) return drawRightBar(p, v);
     const X = 270, B = boostRow(v.torque != null), d = B.d;
     p.cell('lbl', { x: 0, y: d, w: 540, h: 60 }, 'x', (cv) => LBL(cv, X, B.l, 'BOOST'));
     tabular(p, 'boost', B.v, X, B.b, v.boost, 96, WHITE, 'PSI');
@@ -498,7 +553,7 @@ function bigText(cv, str, x, y, size, col) {
 
 module.exports = {
     bigText, needleSprite, gridBackground, duskBackground, duskTopBackground, background, BACKGROUNDS, BG_W, BG_H,
-    BOOST_DROP, boostRow, TEMP_FIG, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
+    BOOST_DROP, boostRow, BOOST_BAR, boostBarU, drawBoostBar, TEMP_FIG, NOTCH_SCALE, STRIP_TOP, GEAR_WINDOW, OPEN_SCALE, LETTER_TOP, LETTER_WINDOW, stripOpen, stripShrinks, stripTop, stripCovers, DW, DH, DCX, DCY, R, NL, NUM_BOX, NEEDLE_IN, arcLayout, arcFace, numerals, numeralLevels, pasteNumeral, faceWith, arcFx,
     Panel, drawLeft, drawRight, drawStrip, drawCentre,
     CENTRE_GEAR, CENTRE_SPEED, CENTRE_SPEED_BASE, CENTRE_GEAR_BASE, CENTRE_GEAR_SIZE, R_PROG, W_PROG, R_LIGHTS, W_LIGHTS, NUM_SIZE, NUM_GROW, NUM_REACH, ROW, figW, WHITE, ORANGE, DIM, NEEDLE_RED,
 };

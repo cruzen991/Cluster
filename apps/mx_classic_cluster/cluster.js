@@ -238,7 +238,7 @@ class ClassicCluster {
      */
     build() {
         const s = this.getSettings();
-        const key = JSON.stringify([s.shift, s.style, s.arcBg, s.notch, s.bottomStrip, !!s.torqueShow, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake, !!this.preloadOff]);
+        const key = JSON.stringify([s.shift, s.style, s.arcBg, s.notch, s.bottomStrip, !!s.torqueShow, s.boostStyle, s.units, s.redline, s.tempUnit, s.dx, s.dy, s.backdrop, s.needles, s.retake, !!this.preloadOff]);
         if (!this.cr || key === this.faceKey) return;
         this.faceKey = key;
         const gen = this.buildGen = (this.buildGen || 0) + 1, cr = this.cr;
@@ -259,7 +259,7 @@ class ClassicCluster {
                         if (pre) this.preArt(art, o, s);
                         later(() => {
                             if (!live()) return;
-                            if (pre) this.preAtlases(art);
+                            if (pre) this.preAtlases(art, s);
                             later(() => { if (live()) this._arcLayers(s, o, art, t0); });
                         });
                     });
@@ -410,11 +410,15 @@ class ClassicCluster {
         art.pre = PL.dialArt(art.base, art.nums, spec); art.preShift = !!s.shift;
         if (!art.basePad) { art.basePad = new F.Canvas(PL.SNAP * Math.ceil(A.DW / PL.SNAP), A.DH).clear([0, 0, 0, 0]); art.basePad.blit(art.base, 0, 0); }
     }
-    /** The readouts' glyph atlases (the same for every setting). */
-    preAtlases(art) {
-        if (art.atlases) return;
+    /** The readouts' glyph atlases (the same for every setting, but boost as a bar adds its smaller figures). */
+    preAtlases(art, s) {
+        if (art.atlases) {
+            if (s && s.boostStyle === 'bar' && !art.atlases.figs60) art.atlases.figs60 = PL.atlas('tabular', A.BOOST_BAR.size, A.BOOST_BAR.val.h, A.BOOST_BAR.base - A.BOOST_BAR.val.y);
+            return;
+        }
         art.atlases = { figs96: PL.atlas('tabular', 96, A.ROW.v1.h, A.ROW.b1 - A.ROW.v1.y), temps: PL.atlas('tabular', A.TEMP_FIG, A.ROW.v1.h, A.ROW.b1 - A.ROW.v1.y), figs118: PL.atlas('tabular', 118, A.CENTRE_SPEED.h, A.CENTRE_SPEED_BASE - A.CENTRE_SPEED.y),
             gear: PL.atlas('gear', A.CENTRE_GEAR_SIZE, A.CENTRE_GEAR.h, A.CENTRE_GEAR_BASE - A.CENTRE_GEAR.y) };
+        if (s) this.preAtlases(art, s);
     }
 
     /**
@@ -425,7 +429,7 @@ class ClassicCluster {
         const cr = this.cr, k = L.scale;
         const spec = A.arcFx(o);
         if (!s.shift) spec.lights = null;
-        this.preArt(art, o, s); this.preAtlases(art);              // drawn already (build), unless called directly
+        this.preArt(art, o, s); this.preAtlases(art, s);              // drawn already (build), unless called directly
         const pre = art.pre;
         // a sub-picture of the dial, at the dial's scale and place (dial pixels q: multiples of 25,
         // so at the notch scale they land on whole panel pixels, exactly over the face)
@@ -475,13 +479,16 @@ class ClassicCluster {
         });
         this.assetRefs = assets;
         // the torque readout off (setting torqueShow): no layer for it at all
-        const FIELDS = { left: { oil: ['temps', A.ROW.v1], cool: ['temps', A.ROW.v2] }, right: Object.assign({ boost: ['figs96', A.boostRow(!!s.torqueShow).v] }, s.torqueShow ? { torque: ['figs96', A.ROW.v2] } : {}),
+        // boost as a bar (setting boostStyle): smaller figures at the line's right, and the bar's own effect layer
+        const bar = s.boostStyle === 'bar';
+        const FIELDS = { left: { oil: ['temps', A.ROW.v1], cool: ['temps', A.ROW.v2] },
+            right: bar ? { boost: ['figs60', A.BOOST_BAR.val] } : Object.assign({ boost: ['figs96', A.boostRow(!!s.torqueShow).v] }, s.torqueShow ? { torque: ['figs96', A.ROW.v2] } : {}),
             centre: { speed: ['figs118', A.CENTRE_SPEED], gear: ['gear', A.CENTRE_GEAR] }, strip: {} };
         this.panels = {};
         for (const key of ['centre', 'left', 'right', 'strip']) {
             const Lk = L[key], z = key === 'centre' ? 31 : 1, kk = Lk.iw ? Lk.w / Lk.iw : 1;
             // a panel with strips (PANEL_BANDS) is sent as a layer per strip: the rest of it is never drawn
-            const bands = key === 'right' && !s.torqueShow ? PL.PANEL_BANDS.rightLow : PL.PANEL_BANDS[key];
+            const bands = key === 'right' && bar ? PL.PANEL_BANDS.rightBar : key === 'right' && !s.torqueShow ? PL.PANEL_BANDS.rightLow : PL.PANEL_BANDS[key];
             if (bands) bands.forEach((b, i) => {
                 R[key + '#' + i] = img(Object.assign({ z, x: Lk.x + Math.round(b.x * kk), y: Lk.y + Math.round(b.y * kk), w: Math.round(b.w * kk), h: Math.round(b.h * kk) },
                     kk !== 1 ? { iw: b.w, ih: b.h, sampling: 'bilinear' } : {}));
@@ -499,6 +506,13 @@ class ClassicCluster {
                 cr.uniform(ref, 'u_col', [1, 1, 1, 1]);
                 p.gpu[f] = { ref, at, text: '', col: A.WHITE, cx: 0, unitW: 0, sent: '' };
             });
+            if (key === 'right' && bar) {
+                const q = A.BOOST_BAR.q;
+                const ref = R.right_boostBar = cr.effect(Object.assign({}, base, { z: z + 1, x: Lk.x + Math.round(q.x * kk), y: Lk.y + Math.round(q.y * kk), w: Math.round(q.w * kk), h: Math.round(q.h * kk),
+                    fs: PL.segbarShader(A.BOOST_BAR.spec) }));
+                cr.uniform(ref, 'u_v', [0, -1, 0, 0]);
+                p.gpu.boostBar = { ref, bar: true, u: [0, -1], sent: '0 -1' };
+            }
             this.panels[key] = { ref: R[key], p, bands: bands ? bands.map((b, i) => ({ b, ref: R[key + '#' + i] })) : null };
         }
         this.panelAt = 0; this.slow = null;
@@ -753,6 +767,11 @@ class ClassicCluster {
 
     /** A GPU readout's new text and colour: its uniforms, only those that changed. */
     _readout(G) {
+        if (G.bar) {             // the boost bar: one uniform, [lit to, peak]
+            const sv = G.u.join(' ');
+            if (sv !== G.sent) { G.sent = sv; this.cr.uniform(G.ref, 'u_v', [G.u[0], G.u[1], 0, 0]); this.sends++; }
+            return;
+        }
         const u = PL.readoutUniforms(G.at, G.text, G.cx, G.unitW), c = rgba(G.col);
         const col = [c[0] / 255, c[1] / 255, c[2] / 255, 1].map((x) => Math.round(x * 1000) / 1000);
         const sx = u.x.join(' '), sg = u.g.join(' '), sc = col.join(' ');
@@ -922,7 +941,8 @@ function arcTexts(s, v, sweep) {
     return {
         centre: { gear: sweep ? '88' : (v.gearText || '-'), speed: sweep ? '888' : (v.speedText == null ? '---' : fit(String(v.speedText), 3, '---')), unit: s.units === 'kmh' ? 'KM/H' : 'MPH' },
         left: { oil: T(v.oilC), cool: T(v.coolC), tu, oilWarn: v.oilC >= 130, coolWarn: v.coolC >= 112, fuel: v.fuel, range: up(v.rangeText || '---') },
-        right: { boost, torque: s.torqueShow ? tq : null, tq: lb ? 'LB-FT' : 'NM', odo: up(v.odoText || '---'), peak: v.peakPsi >= 1 ? 'PEAK ' + Math.round(v.peakPsi) : '' },
+        right: { boost, torque: s.torqueShow && s.boostStyle !== 'bar' ? tq : null, tq: lb ? 'LB-FT' : 'NM', odo: up(v.odoText || '---'), peak: v.peakPsi >= 1 ? 'PEAK ' + Math.round(v.peakPsi) : '',
+            bar: s.boostStyle === 'bar', psi: sweep ? A.BOOST_BAR.max : v.boostPsi, peakPsi: sweep ? 0 : v.peakPsi },
         strip: { outside: T(v.outsideC) === '--' ? '--' : T(v.outsideC) + tu, mode: up(v.modeText) || 'DRIVE', intake: T(v.iatC) === '--' ? '--' : T(v.iatC) + tu },
     };
 }

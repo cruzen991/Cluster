@@ -303,7 +303,7 @@ for (const st of ['tech']) {
     assert(spec.settings.find((x) => x.key === 'theme').hidden, 'the colour theme kept, not offered');
     assert.strictEqual(spec.credits, false);
     const shown = spec.settings.filter((x) => !x.hidden).map((x) => x.key);
-    assert.deepStrictEqual(shown, ['on', 'arcBg', 'notch', 'units', 'tempUnit', 'redline', 'sweep', 'shift', 'bottomStrip', 'retake', 'demo']);
+    assert.deepStrictEqual(shown, ['on', 'arcBg', 'boostStyle', 'notch', 'units', 'tempUnit', 'redline', 'sweep', 'shift', 'bottomStrip', 'retake', 'demo']);
     assert(spec.settings.every((x) => !/Arc style/.test(x.label)), 'no "Arc style" in a label');
 }
 
@@ -802,4 +802,95 @@ function preloadDrive(done) {
         }, 50);
     }, 200);
 }
-preloadDrive(() => console.log('arc cluster self-check ok'));
+/* boost as a bar (setting boostStyle 'bar'): its shader and twin, its place, every inked pixel in a sent strip */
+{
+    const A = require('./arc'), PL = require('./preload'), B = A.BOOST_BAR, S = B.spec;
+    const RX = 1330, RY = 96, box = { x: 1406, y: 342, w: 191, h: 77 };
+    const hit = (r) => RX + r.x < box.x + box.w && box.x < RX + r.x + r.w && RY + r.y < box.y + box.h && box.y < RY + r.y + r.h;
+    assert(!hit(B.q) && !hit(B.val) && PL.PANEL_BANDS.rightBar.every((b) => !hit(b)), 'clear of BMW\'s gear box');
+    const fs = PL.segbarShader(S);
+    assert(/^#version 100/.test(fs) && /#ifdef GL_FRAGMENT_PRECISION_HIGH/.test(fs) && !/\bhalf\b/.test(fs), 'GLSL ES 1.0, no reserved words');
+    assert.strictEqual(JSON.parse(/cc-segbar (\{.*\})/.exec(fs)[1]).n, S.n);
+    // the uniform: whole segments, clamped; no peak below 1 psi
+    assert.deepStrictEqual(A.boostBarU(null, 0), [0, -1]);
+    assert.deepStrictEqual(A.boostBarU(10, 0), [0.5, -1]);
+    assert.deepStrictEqual(A.boostBarU(40, 30), [1, 1]);
+    assert.deepStrictEqual(A.boostBarU(-3, 15), [0, 0.75]);
+    // lit segments: count the lit ones along the bar's middle row
+    const lit = (u) => { let n = 0, was = false; for (let x = 0; x < S.w; x++) { const c = PL.segbarShade(S, u, x + 0.5, S.by + S.bh / 2); const on = c[3] > 128 && c[0] > 200; if (on && !was) n++; was = on; } return n; };
+    assert.strictEqual(lit([0, -1]), 0); assert.strictEqual(lit([0.5, -1]), S.n / 2); assert.strictEqual(lit([1, -1]), S.n);
+    // segments: n of them, each with dark gaps between
+    let segs = 0, was = false;
+    for (let x = 0; x < S.w; x++) { const on = PL.segbarShade(S, [1, -1], x + 0.5, S.by + S.bh / 2)[3] > 128; if (on && !was) segs++; was = on; }
+    assert.strictEqual(segs, S.n, segs + ' segments');
+    // the last segments red when lit, the marker orange over the peak, nothing outside the layer's middle
+    const red = PL.segbarShade(S, [1, -1], S.x0 + S.bw - 6, S.by + S.bh / 2);
+    assert(red[0] > 200 && red[1] < 100, 'hot end red');
+    const mk = PL.segbarShade(S, [0, 0.5], S.x0 + S.bw / 2, S.by - 4 - S.mh / 2);
+    assert(mk[3] > 200 && mk[0] === S.mark[0], 'the peak marker');
+    assert.strictEqual(PL.segbarShade(S, [0, -1], S.x0 + S.bw / 2, S.by - 4 - S.mh / 2)[3], 0, 'no marker without a peak');
+    // panel ink only in the strips sent, GPU or not
+    for (const gpu of [true, false]) {
+        const p = new A.Panel(540, 500); if (gpu) p.gpu = { boost: {}, boostBar: {} };
+        A.drawRight(p, { bar: true, boost: '12', psi: 12, peak: 'PEAK 18', peakPsi: 18, odo: '41,820 MI', torque: null });
+        const d = p.cv.d, W = 540, bands = PL.PANEL_BANDS.rightBar.concat(gpu ? [] : [B.q, B.val]);
+        let outside = 0;
+        for (let y = 0; y < 500; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 0 && !bands.some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)) outside++;
+        assert.strictEqual(outside, 0, outside + ' inked pixels outside the strips (gpu ' + gpu + ')');
+        if (gpu) assert.deepStrictEqual(p.gpu.boostBar.u, [14 / 24, 0.9]);
+        else assert(d[((B.q.y + S.by + 7) * W + B.q.x + S.x0 + 3) * 4 + 3] > 0, 'the bar drawn without the GPU');
+    }
+    // the texts: the bar's values only with the setting
+    const { arcTexts } = require('./cluster');
+    const t = arcTexts({ tempUnit: 'f', boostStyle: 'bar', torqueShow: true }, { boostPsi: 9.4, peakPsi: 14 }, false).right;
+    assert(t.bar && t.psi === 9.4 && t.peakPsi === 14 && t.torque === null && t.boost === '9');
+    assert(!arcTexts({ tempUnit: 'f' }, { boostPsi: 9 }, false).right.bar);
+}
+
+/* the cluster pre-loaded with boost as a bar: one more effect layer, a fifth atlas, the bar moved by its uniform */
+function barDrive(done) {
+    const C = require('./cluster');
+    const sent = [], layers = new Map();
+    let next = 1;
+    const add = (kind) => (o) => { const ref = next++; layers.set(ref, { kind, anims: new Map(), opts: o }); sent.push({ op: kind, ref, o }); return ref; };
+    const fake = {
+        layers, image: add('image'), effect: add('effect'), asset: add('asset'),
+        pixels(ref, rects, px) { sent.push({ op: 'pixels', ref, bytes: px.length }); return true; },
+        set(ref, o) { sent.push({ op: 'set', ref, o }); }, uniform(ref, name, v) { sent.push({ op: 'uniform', ref, name, v }); },
+        bind(ref, s, a) { sent.push({ op: 'bind', ref, s, a }); }, drop(ref) { sent.push({ op: 'drop', ref }); layers.delete(ref); },
+        animate() { return 0; }, _send(m) { sent.push({ op: m.op, ref: m.ref, o: m }); },
+    };
+    const s = { on: true, style: 'arc', torqueUnit: 'lbft', torqueShow: false, shift: true, units: 'mph', tempUnit: 'f', redline: 7000, sweep: false, backdrop: 'full',
+        tank: 59, dx: 0, dy: 0, needles: 'preload', retake: false, notch: true, arcBg: 'dusk', boostStyle: 'bar' };
+    const cl = new C.ClassicCluster({ log: { info() {}, warn() {} }, settings: () => s, app: 'test' });
+    cl.cr = fake; cl.enabled = true; cl.state = { target: 'shown', reason: '', layers: {}, why: {}, budget: '' };
+    cl.build();
+    setTimeout(() => {
+        const made = sent.filter((m) => ['image', 'effect'].includes(m.op));
+        assert(made.length <= 64, made.length + ' layers');
+        assert.strictEqual(sent.filter((m) => m.op === 'asset').length, 5, 'a fifth atlas: the bar\'s 60 px figures');
+        const mem = sent.filter((m) => m.op === 'image' || m.op === 'asset').reduce((a, m) => a + (m.o.iw || m.o.w) * (m.o.ih || m.o.h) * (m.o.format === 'r8' ? 1 : 4) * 2, 0);
+        assert(mem < 12.5 * 1048576, (mem / 1048576).toFixed(2) + ' MB');
+        const bar = cl.refs.right_boostBar;
+        assert(bar && /cc-segbar/.test(sent.find((m) => m.ref === bar && m.op === 'effect').o.fs), 'the bar\'s layer');
+        let t = Date.now(), seq = 0;
+        const feed = (boost) => {
+            cl.update({ speed: 50, rpm: 3000, fuel: 0.5, oil: 0.5, oilC: 95, coolC: 90, boost: 0.5, boostPsi: boost, torqueNm: 200, iatC: 30, outsideC: 15,
+                speedText: '50', gearText: 'D3', rangeText: '200 mi', odoText: '1 mi', modeText: 'Sport', live: true, rpmSeq: ++seq, rpmEvery: 50 });
+            t += 300; cl.tick(50, t);
+        };
+        for (let i = 0; i < 4; i++) feed(0);
+        const n0 = sent.length;
+        for (let b = 0; b <= 16; b += 2) feed(b);
+        const us = sent.slice(n0).filter((m) => m.op === 'uniform' && m.ref === bar).map((m) => m.v);
+        assert(us.length >= 5, us.length + ' bar uniforms');
+        assert.strictEqual(us[us.length - 1][0], Math.round(16 / 20 * 24) / 24, 'lit to 16 psi');
+        assert(us[us.length - 1][1] > 0, 'the peak marker shown');
+        const px = sent.slice(n0).filter((m) => m.op === 'pixels' && Object.keys(cl.refs).some((k) => /^right/.test(k) && cl.refs[k] === m.ref));
+        const bytes = px.reduce((a, m) => a + m.bytes, 0);
+        assert(bytes < 150000, 'the bar moves without pixels; only PSI / the peak text: ' + bytes + ' bytes');
+        done();
+    }, 200);
+}
+
+preloadDrive(() => barDrive(() => console.log('arc cluster self-check ok')));

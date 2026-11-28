@@ -62,6 +62,7 @@ mgu.run({
             notch: settings.get('notch') !== false,
             arcBg: ['grid', 'duskTop'].indexOf(settings.get('arcBg')) >= 0 ? settings.get('arcBg') : 'dusk',
             shift: settings.get('shift') !== false,
+            boostStyle: settings.get('boostStyle') === 'bar' ? 'bar' : 'number',    // 0.16.0
             needles: 'preload',                      // falls back to rotating by itself if the renderer refuses (cluster.js)
         });
 

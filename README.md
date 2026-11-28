@@ -14,7 +14,8 @@ tachometer in the middle, the speed and gear inside it, and big readouts either 
 - **Centre:** the speed, large, and the gear under it: `D4` in drive, `S4` with the lever in the sport gate, and the
   number alone while shifting by hand.
 - **Left:** oil and coolant temperature, a fuel bar and the range.
-- **Right:** boost, with the drive's peak beside its label, and the odometer.
+- **Right:** boost, with the drive's peak beside its label, and the odometer. Optionally boost as
+  [a number and a segmented bar](docs/arc-boost-bar.png) (0-20 psi, red from 17, the peak an orange marker over it).
 - **Bottom row:** outside temperature, drive mode and intake air temperature.
 - **Backgrounds:** Dusk (above, the default), [Dusk from the top](docs/arc-dusk-top.png) (the red coming down from
   the top, pure black along the bottom so BMW's seat-belt light and gear letter show without black boxes round
@@ -33,7 +34,7 @@ M340i.
 4. Open the app once from *All apps*. The cluster changes when the panel is free; the app's screen says what the
    cluster is doing.
 
-Needs cluster-render 0.4.2 or later (it uses about 53 layers and 3 assets; used with 0.5.9). To remove it,
+Needs cluster-render 0.4.2 or later (it uses 53 layers and 4 glyph atlases, 5 with the boost bar; used with 0.5.9). To remove it,
 uninstall it in the Store: the stock cluster comes back as soon as the app's layers go.
 
 ## Settings
@@ -42,6 +43,7 @@ uninstall it in the Store: the stock cluster comes back as soon as the app's lay
 |---|---|
 | Show on the cluster | on / off (also the app's first button); off stays off across restarts |
 | Background | Dusk (default), Dusk from the top, or Horizon grid |
+| Boost readout | *Number* (default), or *Number and bar*: the figures smaller, a segmented bar under them |
 | Driver camera above the cluster | on (default): the tach is placed so no tick sits under the Driving Assistant Professional camera; off for the full-size tach |
 | Speed | mph or km/h |
 | Temperatures | °F or °C |
@@ -117,8 +119,9 @@ The signal decoding is the idrive7-apps kit's (`kit/runtime/car.js`).
   the figures) is uploaded once at the start, about 12 MB of cluster-render's 16 MB. While driving, no pixels are
   sent: the app moves the needle, turns the covers that reveal the lit arc and scales the numerals with small
   messages, and the readouts are GPU layers that draw their figures from the atlases (a new value is a few
-  numbers). If the renderer refuses (an older cluster-render, or its memory full with other apps), the app falls
-  back to a simpler rotating-needle drawing by itself and its screen says why.
+  numbers); the boost bar is a shader too, its segments lit by one number. If the renderer refuses (an older
+  cluster-render, or its memory full with other apps), the app falls back to a simpler rotating-needle drawing by
+  itself and its screen says why.
 - **60 frames a second, one write each:** each frame's needle, arc, numerals and lights go to cluster-render in one
   write, so they reach the cluster in the same flush (30 and 20 a second were tried on the car; 60 was smoothest).
 - **Following the revs:** the car sends a new rpm about 9 times a second. The needle starts gliding to each reading
