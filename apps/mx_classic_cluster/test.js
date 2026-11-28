@@ -802,6 +802,25 @@ function preloadDrive(done) {
         }, 50);
     }, 200);
 }
+/* the tach's bezel and the gear's D (0.16.2) */
+{
+    const A = require('./arc'), PL = require('./preload');
+    const face = A.arcFace({ redline: 7000, max: 8000 }), d = face.d, W = face.w;
+    const px = (r, a) => { const x = Math.round(A.DCX + r * Math.sin(a * Math.PI / 180)), y = Math.round(A.DCY - r * Math.cos(a * Math.PI / 180)); return d[(y * W + x) * 4]; };
+    const rb = A.R + 19.75;
+    assert(px(rb, -40) > 230 && px(rb, 100) < 140 && px(rb, 100) > 50, 'the bezel: bright at the top left, dim on the right: ' + px(rb, -40) + ' / ' + px(rb, 100));
+    assert(!px(rb, 132), 'and open at the bottom');
+    // the D: square at its top left (Orbitron's O is not), round at its top right
+    const at = PL.atlas('gear', A.CENTRE_GEAR_SIZE, A.CENTRE_GEAR.h, A.CENTRE_GEAR_BASE - A.CENTRE_GEAR.y);
+    const ink = (ch) => { const i = at.glyphs.indexOf(ch), c = at.cv; let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+        for (let y = 0; y < c.h; y++) for (let x = i * at.cw; x < (i + 1) * at.cw; x++) if (c.d[(y * c.w + x) * 4 + 3] > 128) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+        return { a: (x, y) => c.d[(y * c.w + x) * 4 + 3], x0, x1, y0, y1 }; };
+    const D = ink('D');
+    assert(D.a(D.x0 + 1, D.y0 + 1) > 200 && D.a(D.x0 + 1, D.y1 - 1) > 200, 'square left corners');
+    assert(D.a(D.x1 - 2, D.y0 + 2) < 40 && D.a(D.x1 - 2, D.y1 - 2) < 40, 'a round bowl on the right');
+    assert(D.a(D.x1 - 1, Math.round((D.y0 + D.y1) / 2)) > 200, 'closed on the right');
+}
+
 /* boost as a bar (setting boostStyle 'bar'): its shader and twin, its place, every inked pixel in a sent strip */
 {
     const A = require('./arc'), PL = require('./preload'), B = A.BOOST_BAR, S = B.spec;

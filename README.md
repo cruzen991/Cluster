@@ -8,11 +8,11 @@ tachometer in the middle, the speed and gear inside it, and big readouts either 
 
 ![ARC Cluster, Dusk background](docs/arc-cluster.png)
 
-- **Tachometer:** a red arc that fills with the revs, a "red glass" needle, numerals that grow as the needle comes
-  up to them, and shift lights outside the scale (green, yellow, then red over the last 2,000 rpm, all flashing red
-  from the redline).
+- **Tachometer:** a thin bezel lit from the top left, a red arc that fills with the revs, a "red glass" needle,
+  numerals that grow as the needle comes up to them, and shift lights outside the scale (green, yellow, then red
+  over the last 2,000 rpm, all flashing red from the redline).
 - **Centre:** the speed, large, and the gear under it: `D4` in drive, `S4` with the lever in the sport gate, and the
-  number alone while shifting by hand.
+  number alone while shifting by hand. The D has a round bowl, so it doesn't read as an O.
 - **Left:** oil and coolant temperature, a fuel bar and the range.
 - **Right:** boost, with the drive's peak beside its label, and the odometer. Optionally boost as
   [a number and a segmented bar](docs/arc-boost-bar.png) (0-25 psi, a segment a psi, red from 21, the peak an orange marker over it).

@@ -106,7 +106,10 @@ function arcFace(opts) {
     cv.clear([0, 0, 0, 0]);
     // the backdrop follows the sweep: open at the bottom, clear of the strip below
     cv.arc(DCX, DCY, 0, R + 18, A0 - 10, A1 + 10, '#0c0e11');
-    cv.arc(DCX, DCY, R + 13, R + 15, A0 - 6, A1 + 6, FAINT);
+    // the bezel (0.16.2, was a faint grey line): a thin bright rim, brightest at the top left as if lit from there,
+    // with a fine black line inside it
+    cv.arc(DCX, DCY, R + 13, R + 15, A0 - 6, A1 + 6, '#000000');
+    cv.arc(DCX, DCY, R + BEZEL.r0, R + BEZEL.r1, -BEZEL.a, BEZEL.a, '#ffffff', { ramp: bezelRamp() });
     // shift lights, unlit: 10 segments over the 2000 rpm below the redline, each a dark tint of its colour
     const l0 = angleOf(red - 2000, max), l1 = angleOf(red, max), st = (l1 - l0) / 10;
     for (let i = 0; i < 10; i++) {
@@ -126,6 +129,15 @@ function arcFace(opts) {
     // (0.15.7: no "x1000 RPM" label)
     return cv;
 }
+
+/* the tach's bezel: radii past R, its half-span (degrees), its grey at angle a (light from the top left) */
+const BEZEL = { r0: 18.5, r1: 21, a: 128 };
+function bezelGrey(a) {
+    const c = Math.max(0, Math.cos((a + 40) * 1.2 * RAD)), k = 0.35 + 0.65 * c * c;
+    const v = Math.round(70 + 175 * k);
+    return [v, v, v, 255];
+}
+function bezelRamp() { return Array.from({ length: 65 }, (_, i) => bezelGrey(-BEZEL.a + 2 * BEZEL.a * i / 64)); }
 
 function tick(cv, a, r0, r1, w, c) {
     const [xa, ya] = pol(DCX, DCY, r0, a), [xb, yb] = pol(DCX, DCY, r1, a);
@@ -540,15 +552,49 @@ function bigText(cv, str, x, y, size, col) {
         const f = fonts.get('orb', fig ? size : Math.min(size, 72), ch), g = f && f.glyphs[ch.codePointAt(0)];
         if (!g) continue;
         const k = size / f.size;
-        parts.push({ f, g, k, x: w });
+        parts.push({ f, g, k, x: w, ch });
         w += g[6] * k;
     }
     const x0 = x - w / 2;
     for (const p of parts) {
         const [gx, gy, gw, gh, ox, oy] = p.g;
-        if (gw && gh) cv._blit(p.f, gx, gy, gw, gh, x0 + p.x + ox * p.k, y + oy * p.k, p.k, c);
+        if (!gw || !gh) continue;
+        if (p.ch === 'D') roundD(cv, p.f, p.g, x0 + p.x + ox * p.k, y + oy * p.k, p.k, col);
+        else cv._blit(p.f, gx, gy, gw, gh, x0 + p.x + ox * p.k, y + oy * p.k, p.k, c);
     }
     return w;
+}
+
+/**
+ * The gear's D (0.16.2): Orbitron's D is a rounded rectangle with small corners, read on the car as an O. This one
+ * keeps its size, stroke and square left side, but its right side is a wide round bowl (corners of D_ROUND of its
+ * height), so it reads as a D. The ink's box and stroke come from Orbitron's own glyph (its atlas).
+ */
+const D_ROUND = 0.45;
+const INK = new Map();
+function inkOf(f, g) {
+    const key = f.family + f.size;
+    if (INK.has(key)) return INK.get(key);
+    const [gx, gy, gw, gh] = g, A = f.alpha, AW = f.atlasW, on = (x, y) => A[(gy + y) * AW + gx + x] >= 128;
+    let x0 = gw, x1 = -1, y0 = gh, y1 = -1;
+    for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) if (on(x, y)) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const mid = Math.round((y0 + y1) / 2);
+    let sw = 0;
+    for (let x = x0; x <= x1 && on(x, mid); x++) sw++;
+    const ink = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, sw };
+    INK.set(key, ink);
+    return ink;
+}
+function roundD(cv, f, g, dx, dy, k, col) {
+    const ink = inkOf(f, g);
+    const x = dx + ink.x * k, y = dy + ink.y * k, w = ink.w * k, h = ink.h * k, s = ink.sw * k, R = h * D_ROUND;
+    const cx = x + w - R;
+    cv.fillRect(x, y, s, h, col);                                   // the stem, square at both ends
+    cv.fillRect(x, y, cx - x + 1, s, col);                          // top and bottom bars, a pixel into the bowl (no seam)
+    cv.fillRect(x, y + h - s, cx - x + 1, s, col);
+    cv.arc(cx, y + R, R - s, R, 0, 90, col);                        // the bowl: two round corners
+    cv.arc(cx, y + h - R, R - s, R, 90, 180, col);
+    cv.fillRect(x + w - s, y + R - 1, s, h - 2 * R + 2, col);       // and the straight between them, over the joins
 }
 
 module.exports = {
