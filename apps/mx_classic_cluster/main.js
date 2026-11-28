@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Classic Cluster - custom gauges on the instrument cluster: the Arc and Tech styles.
+ * ARC Cluster - custom gauges on the instrument cluster (the Arc style).
  *
  * The app reads the car's speed, engine speed, oil temperature, gear and fuel level the way
  * the other kit apps do (kit/car.js, SOME/IP fields the head unit already receives) and draws
@@ -238,7 +238,7 @@ mgu.run({
             const t = ctx.theme(), s = S(), v = read(), st = cluster.status();
             const cv = new Canvas(W, H).clear(t.bg);
             const mid = W / 2, col = st.target === 'shown' ? '#2fd27a' : st.target === 'idle' && !s.on ? t.dim : '#ffb020';
-            cv.text('Classic Cluster', mid, 110, 44, t.text, { font: 'bold', align: 'center', literal: true });
+            cv.text('ARC Cluster', mid, 110, 44, t.text, { font: 'bold', align: 'center', literal: true });
             const busy = toggling && Date.now() - toggling.at < TOGGLE_MS;
             cv.text(busy ? (toggling.on ? 'Turning on...' : 'Turning off...') : !s.on ? (tripped ? 'Off for safety' : 'Off: stock cluster') : label(st.target),
                 mid, 190, 44, busy ? t.text : col, { font: 'bold', align: 'center', literal: true });
@@ -279,7 +279,7 @@ mgu.run({
             const why = cluster.startSweep(false);
             sweepMsg = { at: Date.now(), text: why ? 'not run: ' + why : 'running' };
         });
-        log.info('classic cluster started');
+        log.info('arc cluster started');
     },
 });
 

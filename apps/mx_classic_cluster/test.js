@@ -766,4 +766,4 @@ function preloadDrive(done) {
         }, 50);
     }, 200);
 }
-preloadDrive(() => console.log('classic cluster self-check ok'));
+preloadDrive(() => console.log('arc cluster self-check ok'));

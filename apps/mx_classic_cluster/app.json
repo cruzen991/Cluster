@@ -1,8 +1,8 @@
 {
   "id": "mx_classic_cluster",
-  "title": "Classic Cluster",
+  "title": "ARC Cluster",
   "description": "Custom gauges on the instrument cluster: the Arc style (one tach, big readouts) and the Tech style (two dials)",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "vendor": "custom",
   "loggingId": "OAC7",
   "iconGlyph": "gauge",
@@ -54,7 +54,7 @@
     {
       "name": "MAIN",
       "kind": "canvas",
-      "title": "Classic Cluster",
+      "title": "ARC Cluster",
       "buttons": [
         [
           "BTN_TOGGLE",
